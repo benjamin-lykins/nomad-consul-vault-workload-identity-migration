@@ -1,22 +1,21 @@
 // demo-wi.nomad
 // =============================================================================
-// PHASE 2 — Workload Identity Vault auth demo job
+// PHASE 2 — Workload Identity Vault + Consul auth demo job
 //
 // Key differences from demo-legacy.nomad:
 //
 //   1. vault{} stanza: NO 'policies' field — the role is resolved via JWT claim
 //      mapping configured in Vault (10-migrate-vault-wi.sh).
 //
-//   2. identity{} block: Nomad generates a short-lived JWT for this task,
-//      bound to the audience "vault.io". This JWT is presented to Vault's
-//      jwt-nomad auth method. No VAULT_TOKEN is injected by Nomad.
+//   2. identity "vault_default": Nomad generates a short-lived JWT for this
+//      task bound to audience "vault.io". Presented to Vault's JWT auth method.
+//      No static VAULT_TOKEN is ever injected.
 //
-//   3. Same template{} syntax works — the secret path is unchanged.
-//      Only the auth mechanism changed.
+//   3. identity "consul_default": A separate short-lived JWT bound to audience
+//      "consul.io". The Nomad client presents this to Consul's JWT auth method
+//      when registering the service — no shared CONSUL_HTTP_TOKEN needed.
 //
-//   4. consul{} service block: Consul service registration uses the task's
-//      own JWT (service_identity configured on the Nomad client) instead
-//      of a shared Consul token.
+//   4. Same template{} syntax — only the auth mechanism changed.
 // =============================================================================
 
 job "demo-wi" {
@@ -37,14 +36,24 @@ job "demo-wi" {
       role = "nomad-workloads"
     }
 
-    # Explicit workload identity block — overrides the server default if needed.
-    # Audience must match bound_audiences in the Vault JWT role.
+    # Workload identity for Vault — audience must match bound_audiences in the
+    # Vault JWT role (see scripts/10-migrate-vault-wi.sh).
     identity {
       name = "vault_default"
       aud  = ["vault.io"]
       ttl  = "1h"
-      # env = true  would expose NOMAD_TOKEN_vault_default — optional
       file = true   # written to NOMAD_SECRETS_DIR/vault_default.jwt
+    }
+
+    # Workload identity for Consul — audience must match bound_audiences in the
+    # Consul JWT auth method (see scripts/11-migrate-consul-wi.sh).
+    # The Nomad client uses this JWT when registering services, replacing the
+    # shared CONSUL_HTTP_TOKEN used in the legacy model.
+    identity {
+      name = "consul_default"
+      aud  = ["consul.io"]
+      ttl  = "1h"
+      file = true   # written to NOMAD_SECRETS_DIR/consul_default.jwt
     }
 
     task "reader" {
@@ -57,18 +66,17 @@ job "demo-wi" {
       }
 
       # Service registration via Consul Workload Identity
-      # (no shared token — uses the task_identity JWT from the client config)
+      # Nomad presents the consul_default JWT to Consul's JWT auth method —
+      # no shared CONSUL_HTTP_TOKEN, each allocation gets its own identity.
       service {
-        name = "demo-wi-reader"
-        port = ""    # no port — just showing catalog registration
-        tags = ["workload-identity", "migrated"]
+        name     = "demo-wi-reader"
+        tags     = ["workload-identity", "migrated"]
+        provider = "consul"
 
         check {
-          type     = "script"
-          command  = "/bin/sh"
-          args     = ["-c", "exit 0"]
-          interval = "30s"
-          timeout  = "5s"
+          type     = "ttl"
+          name     = "alive"
+          ttl      = "60s"
         }
       }
 
@@ -92,16 +100,28 @@ job "demo-wi" {
           echo "  API key:      $API_KEY"
           echo ""
 
-          # Show the workload identity JWT file location
-          echo "  JWT file:     \${NOMAD_SECRETS_DIR}/vault_default.jwt"
+          echo ""
+          echo "--- Vault identity ---"
+          echo "  JWT file:  \${NOMAD_SECRETS_DIR}/vault_default.jwt"
           if [ -f "\${NOMAD_SECRETS_DIR}/vault_default.jwt" ]; then
-            echo "  JWT present:  YES (Nomad-generated, short-lived)"
-            # Decode JWT header+payload (for demo — never log JWTs in production)
+            echo "  Present:   YES (short-lived, audience: vault.io)"
             JWT=\$(cat "\${NOMAD_SECRETS_DIR}/vault_default.jwt")
             PAYLOAD=\$(echo "\$JWT" | cut -d. -f2 | base64 -d 2>/dev/null || echo "decode failed")
-            echo "  JWT payload:  \$PAYLOAD"
+            echo "  Payload:   \$PAYLOAD"
           else
-            echo "  JWT present:  NO (check Nomad client config)"
+            echo "  Present:   NO (check Nomad client config)"
+          fi
+
+          echo ""
+          echo "--- Consul identity ---"
+          echo "  JWT file:  \${NOMAD_SECRETS_DIR}/consul_default.jwt"
+          if [ -f "\${NOMAD_SECRETS_DIR}/consul_default.jwt" ]; then
+            echo "  Present:   YES (short-lived, audience: consul.io)"
+            JWT=\$(cat "\${NOMAD_SECRETS_DIR}/consul_default.jwt")
+            PAYLOAD=\$(echo "\$JWT" | cut -d. -f2 | base64 -d 2>/dev/null || echo "decode failed")
+            echo "  Payload:   \$PAYLOAD"
+          else
+            echo "  Present:   NO (check Nomad client config)"
           fi
           echo "=========================================="
 
@@ -111,6 +131,7 @@ job "demo-wi" {
           done
         EOT
         destination = "/local/run.sh"
+        perms       = "755"
         change_mode = "restart"
       }
 
