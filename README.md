@@ -1,11 +1,14 @@
 # Nomad → Workload Identity Migration Lab
 
+> ! This is a lab environment for demonstration purposes only. Do not use this setup in production. It is very simplified and omits critical security and HA considerations. 
+
 Migrates a Nomad cluster from **legacy static token auth** (Vault + Consul) to
 **Workload Identity (JWT-based)** auth. All services run in Multipass VMs on your Mac.
 
+
 ## Versions
 
-| Service | Version |
+| Service | Default Version |
 |---------|---------|
 | Vault   | 1.16.x  |
 | Consul  | 1.21.x  |
@@ -19,20 +22,20 @@ Migrates a Nomad cluster from **legacy static token auth** (Vault + Consul) to
 ┌─────────────────────────────────────────────────────┐
 │  macOS host (Multipass)                             │
 │                                                     │
-│  ┌──────────────┐    ┌──────────────────────────┐  │
-│  │ vault-server │    │     consul-server        │  │
-│  │  :8200       │    │  :8500 (ACLs enabled)    │  │
-│  └──────┬───────┘    └─────────────┬────────────┘  │
+│  ┌──────────────┐    ┌──────────────────────────┐   │
+│  │ vault-server │    │     consul-server        │   │
+│  │  :8200       │    │  :8500 (ACLs enabled)    │   │
+│  └──────┬───────┘    └─────────────┬────────────┘   │
 │         │ JWT auth                 │ JWT auth       │
-│  ┌──────┴──────────────────────────┴────────────┐  │
-│  │              nomad-server  :4646             │  │
-│  │  Exposes /.well-known/jwks.json (OIDC)       │  │
-│  └──────────────────────┬───────────────────────┘  │
-│                         │ allocations              │
-│  ┌──────────────────────┴───────────────────────┐  │
-│  │              nomad-client  :4646             │  │
-│  │  Runs tasks + injects WI JWTs                │  │
-│  └──────────────────────────────────────────────┘  │
+│  ┌──────┴──────────────────────────┴────────────┐   │
+│  │              nomad-server  :4646             │   │
+│  │  Exposes /.well-known/jwks.json (OIDC)       │   │
+│  └──────────────────────┬───────────────────────┘   │
+│                         │ allocations               │
+│  ┌──────────────────────┴───────────────────────┐   │
+│  │              nomad-client  :4646             │   │
+│  │  Runs tasks + injects WI JWTs                │   │
+│  └──────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────┘
 ```
 
