@@ -63,12 +63,16 @@ CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl role create \
     -name 'nomad-workloads' \
     -description 'Role for Nomad workload identity tokens' \
-    -policy-name 'nomad-workloads-wi' 2>/dev/null || \
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
-CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
-  consul acl role update \
-    -name 'nomad-workloads' \
-    -policy-name 'nomad-workloads-wi'
+    -policy-name 'nomad-workloads-wi' || {
+  ROLE_ID=\$(CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+    CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
+    consul acl role read -name 'nomad-workloads' -format json | jq -r '.ID')
+  CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+  CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
+    consul acl role update \
+      -id \"\$ROLE_ID\" \
+      -policy-name 'nomad-workloads-wi'
+}
 "
 ok "Consul role 'nomad-workloads' created"
 
@@ -76,39 +80,31 @@ ok "Consul role 'nomad-workloads' created"
 # 3. Enable JWT auth method on Consul pointing at Nomad JWKS
 # ============================================================================
 info "Configuring Consul JWT auth method..."
-vm_exec "$VM_CONSUL" "
+vm_exec "$VM_CONSUL" "cat > /tmp/nomad-wi-auth.json << 'AUTHCONFIG'
+{
+  \"JWKSURL\": \"http://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json\",
+  \"JWTSupportedAlgs\": [\"RS256\"],
+  \"BoundAudiences\": [\"${NOMAD_CONSUL_JWT_AUD}\"],
+  \"ClaimMappings\": {
+    \"nomad_job_id\":        \"nomad_job_id\",
+    \"nomad_namespace\":     \"nomad_namespace\",
+    \"nomad_task\":          \"nomad_task\",
+    \"nomad_allocation_id\": \"nomad_allocation_id\"
+  }
+}
+AUTHCONFIG
 CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl auth-method create \
     -name 'nomad-wi' \
     -type 'jwt' \
     -description 'Nomad Workload Identity JWT auth' \
-    -config '{
-      \"JWKSURL\": \"http://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json\",
-      \"JWTSupportedAlgs\": [\"RS256\", \"EdDSA\"],
-      \"BoundAudiences\": [\"${NOMAD_CONSUL_JWT_AUD}\"],
-      \"ClaimMappings\": {
-        \"/nomad_job_id\":        \"nomad_job_id\",
-        \"/nomad_namespace\":     \"nomad_namespace\",
-        \"/nomad_task\":          \"nomad_task\",
-        \"/nomad_allocation_id\": \"nomad_allocation_id\"
-      }
-    }' 2>/dev/null || \
+    -config @/tmp/nomad-wi-auth.json || \
 CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl auth-method update \
     -name 'nomad-wi' \
-    -config '{
-      \"JWKSURL\": \"http://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json\",
-      \"JWTSupportedAlgs\": [\"RS256\", \"EdDSA\"],
-      \"BoundAudiences\": [\"${NOMAD_CONSUL_JWT_AUD}\"],
-      \"ClaimMappings\": {
-        \"/nomad_job_id\":        \"nomad_job_id\",
-        \"/nomad_namespace\":     \"nomad_namespace\",
-        \"/nomad_task\":          \"nomad_task\",
-        \"/nomad_allocation_id\": \"nomad_allocation_id\"
-      }
-    }'
+    -config @/tmp/nomad-wi-auth.json
 "
 ok "Consul JWT auth method 'nomad-wi' configured"
 
