@@ -83,7 +83,7 @@ info "Waiting for workload identity demo job to start..."
 for i in $(seq 1 40); do
   STATUS=$(vm_exec "$VM_NOMAD_SERVER" \
     "NOMAD_ADDR=http://127.0.0.1:${NOMAD_PORT} \
-    nomad job status demo-wi -short 2>/dev/null | grep -E '^Status' | awk '{print \$3}'" || echo "pending")
+    nomad job status demo-wi 2>/dev/null | grep -E '^Status' | head -1 | awk '{print \$3}'" || echo "pending")
   [[ "$STATUS" == "running" ]] && break
   echo "  Status: ${STATUS} (attempt $i/40)"
   sleep 5

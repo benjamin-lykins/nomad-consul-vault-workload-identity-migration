@@ -89,24 +89,24 @@ job "demo-wi" {
 
           echo ""
           echo "--- Vault identity ---"
-          echo "  JWT file:  \${NOMAD_SECRETS_DIR}/vault_default.jwt"
-          if [ -f "\${NOMAD_SECRETS_DIR}/vault_default.jwt" ]; then
+          echo "  JWT file:  ${NOMAD_SECRETS_DIR}/vault_default.jwt"
+          if [ -f "${NOMAD_SECRETS_DIR}/vault_default.jwt" ]; then
             echo "  Present:   YES (short-lived, audience: vault.io)"
-            JWT=\$(cat "\${NOMAD_SECRETS_DIR}/vault_default.jwt")
-            PAYLOAD=\$(echo "\$JWT" | cut -d. -f2 | base64 -d 2>/dev/null || echo "decode failed")
-            echo "  Payload:   \$PAYLOAD"
+            JWT=$(cat "${NOMAD_SECRETS_DIR}/vault_default.jwt")
+            PAYLOAD=$(echo "$JWT" | cut -d. -f2 | base64 -d 2>/dev/null || echo "decode failed")
+            echo "  Payload:   $PAYLOAD"
           else
             echo "  Present:   NO (check Nomad client config)"
           fi
 
           echo ""
           echo "--- Consul identity ---"
-          echo "  JWT file:  \${NOMAD_SECRETS_DIR}/consul_default.jwt"
-          if [ -f "\${NOMAD_SECRETS_DIR}/consul_default.jwt" ]; then
+          echo "  JWT file:  ${NOMAD_SECRETS_DIR}/consul_default.jwt"
+          if [ -f "${NOMAD_SECRETS_DIR}/consul_default.jwt" ]; then
             echo "  Present:   YES (short-lived, audience: consul.io)"
-            JWT=\$(cat "\${NOMAD_SECRETS_DIR}/consul_default.jwt")
-            PAYLOAD=\$(echo "\$JWT" | cut -d. -f2 | base64 -d 2>/dev/null || echo "decode failed")
-            echo "  Payload:   \$PAYLOAD"
+            JWT=$(cat "${NOMAD_SECRETS_DIR}/consul_default.jwt")
+            PAYLOAD=$(echo "$JWT" | cut -d. -f2 | base64 -d 2>/dev/null || echo "decode failed")
+            echo "  Payload:   $PAYLOAD"
           else
             echo "  Present:   NO (check Nomad client config)"
           fi

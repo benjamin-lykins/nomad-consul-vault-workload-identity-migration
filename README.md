@@ -294,9 +294,14 @@ Changes on Vault (Nomad is **unchanged** at this step):
 - Configures JWKS URL: `http://<nomad-server>:4646/.well-known/jwks.json`
 - Creates JWT role `nomad-workloads`:
   - `bound_audiences = ["vault.io"]`
-  - Claims mapped: `nomad_job_id`, `nomad_namespace`, `nomad_task`
+  - `user_claim = "nomad_job_id"` (bare name — no leading `/`)
+  - Claims mapped: `nomad_job_id`, `nomad_namespace`, `nomad_task`, `nomad_allocation_id`
   - Token policy: `nomad-workloads-wi`
-- Creates policy `nomad-workloads-wi` (same paths as legacy, different grant mechanism)
+  - `token_period = "30m"` — Nomad renews the token before it expires
+- Creates policy `nomad-workloads-wi` (same paths as legacy, different grant mechanism):
+  - `secret/data/demo/*` — read
+  - `auth/token/lookup-self` — read
+  - `auth/token/renew-self` — update (required so Nomad can renew short-lived task tokens)
 
 **At this point:** Vault is ready to accept Nomad JWTs, but Nomad hasn't switched yet. Legacy tokens still work.
 
@@ -313,11 +318,14 @@ Changes on Consul (Nomad is **unchanged** at this step):
 
 - Creates policy `nomad-workloads-wi` (service/node read, service write)
 - Creates role `nomad-workloads` bound to that policy
-- Creates JWT auth method `nomad-wi`:
-  - JWKS URL: Nomad server
+- Creates JWT auth method **`nomad-workloads`** (Nomad's default expected name):
+  - JWKS URL: Nomad server `/.well-known/jwks.json`
   - Bound audiences: `["consul.io"]`
-  - Claim mappings for `nomad_job_id`, `nomad_namespace`, `nomad_task`
+  - Claim mappings for `nomad_job_id`, `nomad_namespace`, `nomad_task`, `nomad_allocation_id`
+  - Only `RS256` is listed — `EdDSA` is not supported in Consul ≤ 1.16
 - Creates binding rule: any JWT with `nomad_job_id != ""` → `nomad-workloads` role
+
+> **Why `nomad-workloads`?** Nomad 1.7+ looks for this exact auth method name by default when deriving per-task Consul tokens. Using any other name requires additional Nomad server config.
 
 ---
 
@@ -328,7 +336,19 @@ make migrate-nomad
 # or: scripts/12-update-nomad-wi.sh
 ```
 
-This is the moment of migration. Changes:
+This is the moment of migration. It performs the following in order:
+
+1. Writes the new **Nomad server config** with JWT-based Vault + Consul stanzas (via `multipass transfer` — writes locally, transfers to VM, then `sudo mv` into place)
+2. Creates a **minimal Consul token** for the Nomad server process itself (Nomad still needs a token for its own service registration in Consul — workload JWTs only cover task traffic)
+3. **Renames the Consul auth method** to `nomad-workloads` if an old `nomad-wi` method exists from a previous run
+4. **Enables Consul ACLs** on the Consul client agents running on both Nomad VMs (`/etc/consul.d/acl.hcl`) — without this, the local agent returns `ACL support disabled` and JWT login fails
+5. Updates the **Nomad server systemd override** — removes `VAULT_TOKEN`, keeps a minimal `CONSUL_HTTP_TOKEN`
+6. Writes the new **Nomad client config** with JWT-based Consul stanzas
+7. Creates a **minimal Consul token** for the Nomad client process
+8. Updates the **Nomad client systemd override** similarly
+9. Restarts Nomad server, then client
+
+Changes to configs:
 
 **Nomad server config** (`/etc/nomad.d/server.hcl`):
 
@@ -420,7 +440,7 @@ Template engine (inside Nomad):
   Token revoked when allocation ends
 
 Consul:
-  Same JWT (audience "consul.io") presented to Consul nomad-wi auth method
+  Same JWT (audience "consul.io") presented to Consul nomad-workloads auth method
   Consul issues an ACL token per task → service registered under that token
 ```
 
@@ -481,6 +501,50 @@ VAULT_ADDR=http://127.0.0.1:8200 vault read auth/jwt-nomad/config
 make shell VM=nomad-server
 NOMAD_ADDR=http://127.0.0.1:4646 nomad job status demo-wi
 NOMAD_ADDR=http://127.0.0.1:4646 nomad alloc logs <alloc-id> reader
+```
+
+**Task stuck at "Building Task Directory" / template hanging:**
+```bash
+# Check Nomad client service logs — the real error is here, not in the UI
+make shell VM=nomad-client
+sudo journalctl -u nomad --since "5 minutes ago" | tail -40
+```
+Common causes:
+- Vault JWT role has wrong `user_claim` (must be `nomad_job_id`, not `/nomad_job_id`)
+- Vault policy missing `auth/token/renew-self` — task token can't renew itself
+- `\$VAR` in job template renders as a literal `\$` — use `$VAR` directly (Nomad's template engine only processes `{{ }}`)
+
+**Consul pre-run hook fails: `ACL support disabled`:**
+
+The Consul client agent on the Nomad VM doesn't have ACLs enabled. Script 12 adds `/etc/consul.d/acl.hcl` to fix this, but if you're setting up manually:
+```bash
+# On nomad-server and nomad-client VMs:
+sudo tee /etc/consul.d/acl.hcl > /dev/null <<EOF
+acl {
+  enabled        = true
+  default_policy = "deny"
+  tokens {
+    agent = "<bootstrap-token>"
+  }
+}
+EOF
+sudo systemctl restart consul
+```
+
+**Consul pre-run hook fails: `auth method "nomad-workloads" not found`:**
+
+Nomad 1.7+ looks for a Consul auth method named exactly `nomad-workloads`. If the method was created under a different name, delete it and recreate:
+```bash
+consul acl auth-method delete -name <old-name>
+# Then re-run scripts/11-migrate-consul-wi.sh
+```
+
+**`consul acl role update` fails: `Cannot update a role without specifying the -id parameter`:**
+
+Consul requires `-id` (not `-name`) for role updates. Read the ID first:
+```bash
+ROLE_ID=$(consul acl role read -name nomad-workloads -format json | jq -r '.ID')
+consul acl role update -id "$ROLE_ID" -policy-name nomad-workloads-wi
 ```
 
 ## Post-Migration Cleanup

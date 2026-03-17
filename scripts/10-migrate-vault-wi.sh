@@ -74,9 +74,12 @@ path \"secret/metadata/demo/*\" {
   capabilities = [\"list\", \"read\"]
 }
 
-# Allow workloads to look up their own token info
+# Allow workloads to look up and renew their own token
 path \"auth/token/lookup-self\" {
   capabilities = [\"read\"]
+}
+path \"auth/token/renew-self\" {
+  capabilities = [\"update\"]
 }
 POLICY
 VAULT_ADDR=http://127.0.0.1:${VAULT_PORT} \
