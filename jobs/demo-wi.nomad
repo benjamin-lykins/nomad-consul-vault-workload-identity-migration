@@ -26,38 +26,30 @@ job "demo-wi" {
   group "reader" {
     count = 1
 
-    # Workload Identity for Vault access
-    # Nomad will generate a JWT for this task and use jwt-nomad auth method.
-    # No 'policies' needed here — the Vault JWT role resolves the policy.
-    vault {
-      # The 'role' here corresponds to the role created in Vault's jwt-nomad
-      # auth method (see scripts/10-migrate-vault-wi.sh).
-      # If omitted, the default role configured on the auth method is used.
-      role = "nomad-workloads"
-    }
-
-    # Workload identity for Vault — audience must match bound_audiences in the
-    # Vault JWT role (see scripts/10-migrate-vault-wi.sh).
-    identity {
-      name = "vault_default"
-      aud  = ["vault.io"]
-      ttl  = "1h"
-      file = true   # written to NOMAD_SECRETS_DIR/vault_default.jwt
-    }
-
-    # Workload identity for Consul — audience must match bound_audiences in the
-    # Consul JWT auth method (see scripts/11-migrate-consul-wi.sh).
-    # The Nomad client uses this JWT when registering services, replacing the
-    # shared CONSUL_HTTP_TOKEN used in the legacy model.
-    identity {
-      name = "consul_default"
-      aud  = ["consul.io"]
-      ttl  = "1h"
-      file = true   # written to NOMAD_SECRETS_DIR/consul_default.jwt
-    }
-
     task "reader" {
       driver = "docker"
+
+      # Workload Identity for Vault — audience must match bound_audiences in the
+      # Vault JWT role (see scripts/10-migrate-vault-wi.sh).
+      vault {
+        role = "nomad-workloads"
+      }
+
+      # Additional identity for Vault JWT auth
+      identity {
+        name = "vault_default"
+        aud  = ["vault.io"]
+        ttl  = "1h"
+        file = true   # written to NOMAD_SECRETS_DIR/vault_default.jwt
+      }
+
+      # Additional identity for Consul JWT auth (see scripts/11-migrate-consul-wi.sh)
+      identity {
+        name = "consul_default"
+        aud  = ["consul.io"]
+        ttl  = "1h"
+        file = true   # written to NOMAD_SECRETS_DIR/consul_default.jwt
+      }
 
       config {
         image   = "alpine:3.19"
@@ -73,11 +65,6 @@ job "demo-wi" {
         tags     = ["workload-identity", "migrated"]
         provider = "consul"
 
-        check {
-          type     = "ttl"
-          name     = "alive"
-          ttl      = "60s"
-        }
       }
 
       # Same template syntax as the legacy job — only auth mechanism changed

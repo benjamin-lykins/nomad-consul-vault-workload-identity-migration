@@ -24,7 +24,7 @@ info "============================================================"
 # 1. Create Consul policy for Nomad workload service/check registration
 # ============================================================================
 info "Creating Consul policy for Nomad workloads..."
-vm_exec "$VM_CONSUL" "cat > /tmp/nomad-wi-policy.hcl << 'POLICY'
+vm_exec "$VM_CONSUL" "cat > /tmp/nomad-workloads-policy.hcl << 'POLICY'
 # Nomad workload identity policy
 # Grants workloads the ability to register services and checks for their own job
 
@@ -44,12 +44,12 @@ CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl policy create \
     -name 'nomad-workloads-wi' \
     -description 'Nomad workload identity policy' \
-    -rules @/tmp/nomad-wi-policy.hcl 2>/dev/null || \
+    -rules @/tmp/nomad-workloads-policy.hcl 2>/dev/null || \
 CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl policy update \
     -name 'nomad-workloads-wi' \
-    -rules @/tmp/nomad-wi-policy.hcl
+    -rules @/tmp/nomad-workloads-policy.hcl
 "
 ok "Consul policy 'nomad-workloads-wi' created"
 
@@ -80,7 +80,7 @@ ok "Consul role 'nomad-workloads' created"
 # 3. Enable JWT auth method on Consul pointing at Nomad JWKS
 # ============================================================================
 info "Configuring Consul JWT auth method..."
-vm_exec "$VM_CONSUL" "cat > /tmp/nomad-wi-auth.json << 'AUTHCONFIG'
+vm_exec "$VM_CONSUL" "cat > /tmp/nomad-workloads-auth.json << 'AUTHCONFIG'
 {
   \"JWKSURL\": \"http://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json\",
   \"JWTSupportedAlgs\": [\"RS256\"],
@@ -96,17 +96,17 @@ AUTHCONFIG
 CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl auth-method create \
-    -name 'nomad-wi' \
+    -name 'nomad-workloads' \
     -type 'jwt' \
     -description 'Nomad Workload Identity JWT auth' \
-    -config @/tmp/nomad-wi-auth.json || \
+    -config @/tmp/nomad-workloads-auth.json || \
 CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl auth-method update \
-    -name 'nomad-wi' \
-    -config @/tmp/nomad-wi-auth.json
+    -name 'nomad-workloads' \
+    -config @/tmp/nomad-workloads-auth.json
 "
-ok "Consul JWT auth method 'nomad-wi' configured"
+ok "Consul JWT auth method 'nomad-workloads' configured"
 
 # ============================================================================
 # 4. Create binding rule to auto-assign role based on JWT claims
@@ -116,7 +116,7 @@ vm_exec "$VM_CONSUL" "
 CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl binding-rule create \
-    -method 'nomad-wi' \
+    -method 'nomad-workloads' \
     -description 'Bind all Nomad workload JWTs to the nomad-workloads role' \
     -bind-type 'role' \
     -bind-name 'nomad-workloads' \
@@ -131,7 +131,7 @@ info "Verifying Consul JWT auth method..."
 vm_exec "$VM_CONSUL" "
 CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
-  consul acl auth-method read -name nomad-wi
+  consul acl auth-method read -name nomad-workloads
 "
 ok "Consul JWT auth method verified"
 
@@ -140,7 +140,7 @@ echo "============================================================"
 echo "  Consul Workload Identity Configuration Complete"
 echo "============================================================"
 echo ""
-echo "  Auth method:      nomad-wi (JWT)"
+echo "  Auth method:      nomad-workloads (JWT)"
 echo "  JWKS URL:         http://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json"
 echo "  JWT audience:     ${NOMAD_CONSUL_JWT_AUD}"
 echo "  Binding rule:     nomad-workloads role"

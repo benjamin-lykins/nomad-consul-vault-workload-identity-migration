@@ -97,11 +97,11 @@ VAULT_TOKEN=${VAULT_TOKEN} \
   vault write auth/jwt-nomad/role/nomad-workloads \
     role_type='jwt' \
     bound_audiences='${NOMAD_VAULT_JWT_AUD}' \
-    user_claim='/nomad_job_id' \
-    claim_mappings='/nomad_job_id=nomad_job_id' \
-    claim_mappings='/nomad_namespace=nomad_namespace' \
-    claim_mappings='/nomad_task=nomad_task' \
-    claim_mappings='/nomad_allocation_id=nomad_allocation_id' \
+    user_claim='nomad_job_id' \
+    claim_mappings='nomad_job_id=nomad_job_id' \
+    claim_mappings='nomad_namespace=nomad_namespace' \
+    claim_mappings='nomad_task=nomad_task' \
+    claim_mappings='nomad_allocation_id=nomad_allocation_id' \
     token_type='service' \
     token_policies='nomad-workloads-wi' \
     token_period='30m' \
