@@ -168,7 +168,7 @@ Creates 4 Multipass VMs using Ubuntu 22.04 and `cloud-init/base.yaml`.
 | `vault-server` | Vault storage backend |
 | `consul-server` | Consul server with ACLs |
 | `nomad-server` | Nomad server (scheduler) |
-| `nomad-client` | Nomad client (task runner) |
+| `nomad-client` | Nomad client (runs workloads) |
 
 ---
 
