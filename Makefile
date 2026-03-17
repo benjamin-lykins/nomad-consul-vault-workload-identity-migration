@@ -69,10 +69,6 @@ migrate-consul: _ensure_exec
 migrate-nomad: _ensure_exec
 	$(SCRIPTS)/12-update-nomad-wi.sh
 
-## Deploy legacy + partial-WI jobs side-by-side (demonstrates coexistence)
-verify-partial: _ensure_exec
-	$(SCRIPTS)/07-verify-partial.sh
-
 ## Verify workload identity is working end-to-end
 verify-wi: _ensure_exec
 	$(SCRIPTS)/13-verify-migration.sh
@@ -82,7 +78,6 @@ migrate: _ensure_exec
 	@echo "=== Phase 2: Workload Identity Migration ==="
 	$(SCRIPTS)/10-migrate-vault-wi.sh
 	$(SCRIPTS)/11-migrate-consul-wi.sh
-	$(SCRIPTS)/07-verify-partial.sh
 	$(SCRIPTS)/12-update-nomad-wi.sh
 	$(SCRIPTS)/13-verify-migration.sh
 
@@ -175,4 +170,4 @@ help:
 
 .PHONY: _ensure_exec vms vault consul nomad-server nomad-client bootstrap \
         verify-legacy deploy migrate-vault migrate-consul migrate-nomad \
-        verify-partial verify-wi migrate status ui secrets stop start unseal clean shell help
+        verify-wi migrate status ui secrets stop start unseal clean shell help
