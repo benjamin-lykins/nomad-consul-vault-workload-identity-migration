@@ -64,11 +64,13 @@ vm_exec "$VM_VAULT" \
 # ============================================================================
 # 4. Stop the legacy job and deploy the workload identity demo job
 # ============================================================================
-info "Stopping legacy demo job..."
-vm_exec "$VM_NOMAD_SERVER" \
-  "NOMAD_ADDR=http://127.0.0.1:${NOMAD_PORT} \
-  nomad job stop demo-legacy 2>/dev/null || true"
-ok "Legacy job stopped"
+info "Stopping legacy and partial migration jobs..."
+for job in demo-legacy demo-partial; do
+  vm_exec "$VM_NOMAD_SERVER" \
+    "NOMAD_ADDR=http://127.0.0.1:${NOMAD_PORT} \
+    nomad job stop ${job} 2>/dev/null || true" \
+    && ok "${job}: stopped" || true
+done
 
 info "Deploying workload identity demo job..."
 JOB_FILE="${REPO_ROOT}/jobs/demo-wi.nomad"
@@ -135,8 +137,13 @@ echo "  Auth model:    WORKLOAD IDENTITY (JWT)"
 echo "  Vault auth:    jwt-nomad (JWT, not static token)"
 echo "  Consul auth:   nomad-wi  (JWT, not static token)"
 echo ""
-echo "  Legacy job:    STOPPED"
-echo "  WI demo job:   RUNNING"
+echo "  Migration summary:"
+echo "    Vault  — per-job incremental: each job independently opted in"
+echo "    Consul — per-client cutover:  all services switched at step 12"
+echo ""
+echo "    demo-legacy   Vault=legacy token  Consul=shared token  STOPPED"
+echo "    demo-partial  Vault=WI JWT        Consul=shared token  STOPPED"
+echo "    demo-wi       Vault=WI JWT        Consul=WI JWT        RUNNING"
 echo ""
 echo "  Vault UI:   http://${VAULT_IP}:${VAULT_PORT}"
 echo "  Consul UI:  http://${CONSUL_IP}:${CONSUL_PORT}"
@@ -146,4 +153,4 @@ echo ""
 echo "Migration complete! See README.md for next steps:"
 echo "  - Revoke the legacy Vault Nomad token"
 echo "  - Revoke the legacy Consul Nomad tokens"
-echo "  - Update remaining jobs to use workload identity"
+echo "  - Delete the nomad-cluster Vault token role"

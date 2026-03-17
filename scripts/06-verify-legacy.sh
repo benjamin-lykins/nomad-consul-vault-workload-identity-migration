@@ -21,9 +21,8 @@ info "=== Verifying LEGACY setup ==="
 # Check Vault
 # ---------------------------------------------------------------------------
 info "Checking Vault..."
-VAULT_STATUS=$(vm_exec "$VM_VAULT" \
-  "VAULT_ADDR=http://127.0.0.1:${VAULT_PORT} vault status -format=json")
-SEALED=$(echo "$VAULT_STATUS" | jq -r '.sealed')
+SEALED=$(vm_exec "$VM_VAULT" \
+  "VAULT_ADDR=http://127.0.0.1:${VAULT_PORT} vault status 2>/dev/null | awk '/^Sealed/{print \$2}'" || echo "true")
 [[ "$SEALED" == "false" ]] && ok "Vault: unsealed" || die "Vault is sealed!"
 
 # Read demo secret
@@ -96,5 +95,11 @@ echo "  Vault token in nomad systemd env: YES"
 echo "  Consul token in nomad systemd env: YES"
 echo ""
 echo "  The cluster is ready for migration."
-echo "  Begin with: scripts/10-migrate-vault-wi.sh"
+echo ""
+echo "  Migration stages:"
+echo "    Stage 1 (now):  demo-legacy — Vault=legacy  Consul=legacy"
+echo "    Stage 2:        demo-partial — Vault=WI      Consul=legacy"
+echo "    Stage 3:        demo-wi      — Vault=WI      Consul=WI"
+echo ""
+echo "  Begin Phase 2 with: scripts/10-migrate-vault-wi.sh"
 echo "============================================================"
