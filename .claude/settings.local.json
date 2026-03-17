@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x /Users/benjamin.lykins/customer/q2/nomad-consul-vault-workload-identity-migration/scripts/*.sh /Users/benjamin.lykins/customer/q2/nomad-consul-vault-workload-identity-migration/scripts/lib/*.sh)",
+      "Bash(multipass exec:*)"
+    ]
+  }
+}

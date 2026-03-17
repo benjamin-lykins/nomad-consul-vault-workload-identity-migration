@@ -1,0 +1,10 @@
+# Never commit secrets
+.secrets/
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp

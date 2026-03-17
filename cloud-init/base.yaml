@@ -1,0 +1,37 @@
+#cloud-config
+# =============================================================================
+# cloud-init/base.yaml — Applied to every Multipass VM in the lab
+# Sets up: hostname, packages, sysctl tweaks, and a lab user
+# =============================================================================
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - curl
+  - wget
+  - gnupg
+  - lsb-release
+  - unzip
+  - jq
+  - netcat-openbsd
+  - net-tools
+  - ca-certificates
+  - software-properties-common
+  - apt-transport-https
+
+# Disable swap — required for Vault
+bootcmd:
+  - swapoff -a
+
+runcmd:
+  # Persist swap disable
+  - sed -i '/swap/d' /etc/fstab
+  # Increase open file limits (Nomad/Consul/Vault need this)
+  - echo "* soft nofile 65536" >> /etc/security/limits.conf
+  - echo "* hard nofile 65536" >> /etc/security/limits.conf
+  # Allow forwarding for Consul DNS
+  - sysctl -w net.ipv4.ip_forward=1
+  - echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+
+final_message: "Lab VM ready after $UPTIME seconds"
