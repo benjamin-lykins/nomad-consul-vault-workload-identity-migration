@@ -1,6 +1,7 @@
 # Nomad → Workload Identity Migration Lab
 
-> ! This is a lab environment for demonstration purposes only. Do not use this setup in production. It is very simplified and omits critical security and HA considerations. 
+> [!WARNING]
+> This is a lab environment for demonstration purposes only. Do not use this setup in production. It is very simplified and omits critical security and HA considerations. 
 
 Migrates a Nomad cluster from **legacy static token auth** (Vault + Consul) to
 **Workload Identity (JWT-based)** auth. All services run in Multipass VMs on your local machine.
