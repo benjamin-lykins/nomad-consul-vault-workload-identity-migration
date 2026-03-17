@@ -122,8 +122,9 @@ consul {
 # Vault integration — LEGACY token auth
 # VAULT_TOKEN is injected via the systemd override in 05-bootstrap.sh
 vault {
-  enabled = true
-  address = "VAULT_ADDR_PLACEHOLDER"
+  enabled          = true
+  address          = "VAULT_ADDR_PLACEHOLDER"
+  create_from_role = "nomad-cluster"
 }
 NOMADEOF
 

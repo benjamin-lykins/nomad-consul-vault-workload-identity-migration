@@ -142,8 +142,8 @@ consul {
 
 # Vault integration — LEGACY token (injected via systemd env)
 vault {
-  enabled = true
-  address = "http://${VAULT_IP}:${VAULT_PORT}"
+  enabled          = true
+  address          = "http://${VAULT_IP}:${VAULT_PORT}"
 }
 
 # Enable Docker driver

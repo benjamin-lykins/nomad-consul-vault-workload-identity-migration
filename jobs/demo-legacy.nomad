@@ -1,11 +1,16 @@
 // demo-legacy.nomad
 // =============================================================================
-// PHASE 1 — Legacy Vault token auth demo job
+// PHASE 1 — Legacy Vault + Consul token auth demo job
 //
-// This job reads a Vault secret using the LEGACY integration:
+// Vault integration (legacy):
 //   - Nomad server forwards a Vault token derived from the 'nomad-cluster' role
 //   - The token is injected into the task via VAULT_TOKEN env var
 //   - Task uses vault{} stanza to declare which secrets it needs
+//
+// Consul integration (legacy):
+//   - Nomad client registers the service using the CONSUL_HTTP_TOKEN injected
+//     via the systemd override created in 05-bootstrap.sh
+//   - No workload identity — the token is shared across all Nomad workloads
 //
 // After migration this job will be replaced by demo-wi.nomad
 // =============================================================================
@@ -59,7 +64,26 @@ job "demo-legacy" {
           done
         EOT
         destination = "/local/run.sh"
+        perms       = "755"
         change_mode = "restart"
+      }
+
+      # Legacy Consul service registration — Nomad registers this using the
+      # shared CONSUL_HTTP_TOKEN from the systemd override (not per-workload).
+      service {
+        name     = "demo-legacy"
+        port     = ""
+        tags     = ["legacy", "demo"]
+        provider = "consul"
+
+        check {
+          type     = "script"
+          name     = "alive"
+          command  = "/bin/sh"
+          args     = ["-c", "exit 0"]
+          interval = "30s"
+          timeout  = "5s"
+        }
       }
 
       resources {
