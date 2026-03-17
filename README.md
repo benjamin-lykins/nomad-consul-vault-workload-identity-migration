@@ -22,7 +22,7 @@ Supported host platforms: **macOS**, **Linux**, **Windows (WSL2)**.
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  macOS host (Multipass)                             │
+│  host machine (Multipass)                           │
 │                                                     │
 │  ┌──────────────┐    ┌──────────────────────────┐   │
 │  │ vault-server │    │     consul-server        │   │
@@ -61,6 +61,82 @@ make migrate
 ## Step-by-Step
 
 ### Prerequisites
+
+#### macOS
+
+```bash
+brew install multipass make jq
+```
+
+#### Linux (Ubuntu/Debian)
+
+```bash
+sudo snap install multipass
+sudo apt-get install -y make jq
+```
+
+#### Windows (WSL2)
+
+WSL2 is required — the scripts use bash and standard POSIX tools that are not available in cmd/PowerShell.
+
+**1. Install WSL2 with Ubuntu 22.04** (run in PowerShell as Administrator):
+
+```powershell
+wsl --install -d Ubuntu-22.04
+```
+
+Restart when prompted, then open the Ubuntu terminal and complete the user setup.
+
+**2. Install Multipass on the Windows host** (not inside WSL2):
+
+Download and run the installer from [multipass.run](https://multipass.run/install). Multipass runs as a Windows service and is called from WSL2 over the Windows path.
+
+**3. Expose the Multipass CLI to WSL2**:
+
+Add the Windows Multipass binary to your WSL2 PATH. In your `~/.bashrc` or `~/.zshrc` inside WSL2:
+
+```bash
+export PATH="$PATH:/mnt/c/Program Files/Multipass/bin"
+```
+
+Reload your shell and verify:
+
+```bash
+source ~/.bashrc
+multipass version
+```
+
+**4. Install dependencies inside WSL2**:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y make jq
+```
+
+**5. `make ui` on WSL2**:
+
+The `make ui` target uses `open` (macOS-only). On WSL2, use `wslview` instead:
+
+```bash
+# Install wslu for wslview
+sudo apt-get install -y wslu
+
+# Then open UIs manually
+source env.sh
+wslview "http://$(multipass info vault-server | awk '/IPv4/{print $2}'):8200"
+wslview "http://$(multipass info consul-server | awk '/IPv4/{print $2}'):8500"
+wslview "http://$(multipass info nomad-server | awk '/IPv4/{print $2}'):4646"
+```
+
+**Known WSL2 quirks**:
+
+- Multipass VMs get IPs on the Windows Hyper-V network. They are reachable from WSL2 but you may need to add a route: `sudo ip route add <vm-subnet> via <hyperv-gateway>`
+- If `multipass list` hangs, ensure the Multipass service is running in Windows: `Get-Service Multipass` in PowerShell
+- File paths passed to `multipass transfer` must use Linux paths (e.g. `/home/user/...`), not Windows paths
+
+---
+
+#### Verify setup (all platforms)
 
 ```bash
 # Verify Multipass is installed
