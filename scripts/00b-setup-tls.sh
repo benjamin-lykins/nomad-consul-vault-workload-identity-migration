@@ -124,13 +124,16 @@ distribute_certs() {
   multipass transfer "${TLS_DIR}/${cert_name}.crt"    "${vm}:/tmp/${cert_name}.crt"
   multipass transfer "${TLS_DIR}/${cert_name}.key"    "${vm}:/tmp/${cert_name}.key"
 
+  # Files are world-readable at this stage. Each install script tightens key
+  # ownership to the service user once the package (and its user) is installed.
+  # Multiple services on the same VM (e.g. nomad + consul agent) share the cert
+  # until ownership is tightened; for a lab this is acceptable.
   vm_exec "$vm" "
     sudo mv /tmp/ca.crt           /opt/tls/ca.crt
     sudo mv /tmp/${cert_name}.crt /opt/tls/${cert_name}.crt
     sudo mv /tmp/${cert_name}.key /opt/tls/${cert_name}.key
-    sudo chmod 644 /opt/tls/ca.crt /opt/tls/${cert_name}.crt
-    sudo chmod 600 /opt/tls/${cert_name}.key
     sudo chown root:root /opt/tls/ca.crt /opt/tls/${cert_name}.crt /opt/tls/${cert_name}.key
+    sudo chmod 644 /opt/tls/ca.crt /opt/tls/${cert_name}.crt /opt/tls/${cert_name}.key
   "
 
   # Add CA to the system trust store so all tools trust it automatically

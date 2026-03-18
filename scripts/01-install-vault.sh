@@ -42,6 +42,9 @@ vm_exec "$VM" "
   sudo mkdir -p /opt/vault/{data,tls,plugins}
   sudo chown -R vault:vault /opt/vault
   sudo chmod 750 /opt/vault/data
+  # Tighten TLS key ownership now that the vault user exists
+  sudo chown vault:vault /opt/tls/vault-server.key
+  sudo chmod 600 /opt/tls/vault-server.key
 "
 
 # ---------------------------------------------------------------------------

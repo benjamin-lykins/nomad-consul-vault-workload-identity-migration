@@ -44,6 +44,12 @@ vm_exec "$VM" "
   sudo mkdir -p /opt/consul/data
   sudo chown -R nomad:nomad /opt/nomad
   sudo chown -R consul:consul /opt/consul
+  # Tighten TLS key ownership now that the service users exist.
+  sudo chown nomad:nomad /opt/tls/nomad-client.key
+  sudo chmod 600 /opt/tls/nomad-client.key
+  sudo cp /opt/tls/nomad-client.key /opt/tls/nomad-client-consul.key
+  sudo chown consul:consul /opt/tls/nomad-client-consul.key
+  sudo chmod 600 /opt/tls/nomad-client-consul.key
 "
 
 # ---------------------------------------------------------------------------
@@ -94,7 +100,7 @@ tls {
   defaults {
     ca_file                = "/opt/tls/ca.crt"
     cert_file              = "/opt/tls/nomad-client.crt"
-    key_file               = "/opt/tls/nomad-client.key"
+    key_file               = "/opt/tls/nomad-client-consul.key"
     verify_incoming        = false
     verify_outgoing        = true
     verify_server_hostname = false

@@ -60,4 +60,4 @@ for vm in "$VM_VAULT" "$VM_CONSUL" "$VM_NOMAD_SERVER" "$VM_NOMAD_CLIENT"; do
 done
 echo "============================================================"
 echo ""
-echo "Next: run scripts/01-install-vault.sh"
+echo "Next: run scripts/00b-setup-tls.sh"

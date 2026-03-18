@@ -49,6 +49,9 @@ info "Gossip key generated and saved to ${SECRETS_DIR}/consul_gossip_key"
 vm_exec "$VM" "
   sudo mkdir -p /opt/consul/{data,tls}
   sudo chown -R consul:consul /opt/consul
+  # Tighten TLS key ownership now that the consul user exists
+  sudo chown consul:consul /opt/tls/consul-server.key
+  sudo chmod 600 /opt/tls/consul-server.key
 "
 
 # ---------------------------------------------------------------------------
