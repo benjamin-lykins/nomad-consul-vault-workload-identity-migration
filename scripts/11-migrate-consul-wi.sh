@@ -85,20 +85,25 @@ ok "Consul role 'nomad-workloads' created"
 # 3. Enable JWT auth method on Consul pointing at Nomad JWKS
 # ============================================================================
 info "Configuring Consul JWT auth method..."
-vm_exec "$VM_CONSUL" "cat > /tmp/nomad-workloads-auth.json << 'AUTHCONFIG'
-{
-  \"JWKSURL\": \"https://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json\",
-  \"JWKSCAFILE\": \"/opt/tls/ca.crt\",
-  \"JWTSupportedAlgs\": [\"RS256\"],
-  \"BoundAudiences\": [\"${NOMAD_CONSUL_JWT_AUD}\"],
-  \"ClaimMappings\": {
-    \"nomad_job_id\":        \"nomad_job_id\",
-    \"nomad_namespace\":     \"nomad_namespace\",
-    \"nomad_task\":          \"nomad_task\",
-    \"nomad_allocation_id\": \"nomad_allocation_id\"
-  }
-}
-AUTHCONFIG
+# JWKSCAPEM requires the CA cert content inline (not a file path)
+vm_exec "$VM_CONSUL" "
+CA_PEM=\$(sudo cat /opt/tls/ca.crt)
+jq -n \
+  --arg jwks_url 'https://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json' \
+  --arg ca_pem \"\$CA_PEM\" \
+  --argjson audiences '[\"${NOMAD_CONSUL_JWT_AUD}\"]' \
+  '{
+    JWKSURL: \$jwks_url,
+    JWKSCACert: \$ca_pem,
+    JWTSupportedAlgs: [\"RS256\"],
+    BoundAudiences: \$audiences,
+    ClaimMappings: {
+      nomad_job_id:        \"nomad_job_id\",
+      nomad_namespace:     \"nomad_namespace\",
+      nomad_task:          \"nomad_task\",
+      nomad_allocation_id: \"nomad_allocation_id\"
+    }
+  }' > /tmp/nomad-workloads-auth.json
 CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
 CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \

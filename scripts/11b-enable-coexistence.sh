@@ -35,23 +35,25 @@ CONSUL_BOOTSTRAP_TOKEN=$(load_secret "consul_bootstrap_token")
 # ============================================================================
 info "Ensuring Consul auth method 'nomad-workloads' exists..."
 
-_auth_tmpfile=$(mktemp /tmp/nomad-workloads-auth-XXXXXX.json)
-cat > "$_auth_tmpfile" <<AUTHEOF
-{
-  "JWKSURL": "https://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json",
-  "JWKSCAFILE": "/opt/tls/ca.crt",
-  "JWTSupportedAlgs": ["RS256"],
-  "BoundAudiences": ["${NOMAD_CONSUL_JWT_AUD}"],
-  "ClaimMappings": {
-    "nomad_job_id":        "nomad_job_id",
-    "nomad_namespace":     "nomad_namespace",
-    "nomad_task":          "nomad_task",
-    "nomad_allocation_id": "nomad_allocation_id"
-  }
-}
-AUTHEOF
-multipass transfer "$_auth_tmpfile" "$VM_CONSUL:/tmp/nomad-workloads-auth.json"
-rm -f "$_auth_tmpfile"
+# JWKSCAPEM requires CA cert content inline (not a file path)
+vm_exec "$VM_CONSUL" "
+CA_PEM=\$(sudo cat /opt/tls/ca.crt)
+jq -n \
+  --arg jwks_url 'https://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json' \
+  --arg ca_pem \"\$CA_PEM\" \
+  --argjson audiences '[\"${NOMAD_CONSUL_JWT_AUD}\"]' \
+  '{
+    JWKSURL: \$jwks_url,
+    JWKSCACert: \$ca_pem,
+    JWTSupportedAlgs: [\"RS256\"],
+    BoundAudiences: \$audiences,
+    ClaimMappings: {
+      nomad_job_id:        \"nomad_job_id\",
+      nomad_namespace:     \"nomad_namespace\",
+      nomad_task:          \"nomad_task\",
+      nomad_allocation_id: \"nomad_allocation_id\"
+    }
+  }' > /tmp/nomad-workloads-auth.json"
 
 # Remove old 'nomad-wi' method if it exists from a previous run
 vm_exec "$VM_CONSUL" "
