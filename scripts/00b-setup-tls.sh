@@ -79,6 +79,7 @@ EXTEOF
     -in      "${TLS_DIR}/${name}.csr" \
     -CA      "${TLS_DIR}/ca.crt" \
     -CAkey   "${TLS_DIR}/ca.key" \
+    -CAserial "${TLS_DIR}/ca.srl" \
     -CAcreateserial \
     -out     "${TLS_DIR}/${name}.crt" \
     -days    ${TLS_DAYS} \
