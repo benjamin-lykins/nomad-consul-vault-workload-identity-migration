@@ -68,8 +68,21 @@ retry_join = ["${CONSUL_IP}"]
 encrypt = "${GOSSIP_KEY}"
 
 ports {
+  http     = -1
+  https    = ${CONSUL_PORT}
   grpc     = 8502
   grpc_tls = -1
+}
+
+tls {
+  defaults {
+    ca_file                = "/opt/tls/ca.crt"
+    cert_file              = "/opt/tls/nomad-server.crt"
+    key_file               = "/opt/tls/nomad-server.key"
+    verify_incoming        = false
+    verify_outgoing        = true
+    verify_server_hostname = false
+  }
 }
 EOF
 
@@ -117,6 +130,9 @@ consul {
   auto_advertise      = true
   server_auto_join    = true
   client_auto_join    = true
+  ssl                 = true
+  ca_file             = "/opt/tls/ca.crt"
+  verify_ssl          = true
 }
 
 # Vault integration — LEGACY token auth
@@ -124,7 +140,19 @@ consul {
 vault {
   enabled          = true
   address          = "VAULT_ADDR_PLACEHOLDER"
+  ca_file          = "/opt/tls/ca.crt"
   create_from_role = "nomad-cluster"
+}
+
+# TLS — HTTPS for Nomad API and RPC
+tls {
+  http      = true
+  rpc       = true
+  ca_file   = "/opt/tls/ca.crt"
+  cert_file = "/opt/tls/nomad-server.crt"
+  key_file  = "/opt/tls/nomad-server.key"
+  verify_server_hostname = false
+  verify_https_client    = false
 }
 NOMADEOF
 
@@ -133,7 +161,7 @@ ok "Legacy Nomad server config written (Vault addr placeholder to be replaced)"
 # ---------------------------------------------------------------------------
 # 5. Replace Vault address placeholder
 # ---------------------------------------------------------------------------
-vm_exec "$VM" "sudo sed -i 's|VAULT_ADDR_PLACEHOLDER|http://${VAULT_IP}:${VAULT_PORT}|g' /etc/nomad.d/server.hcl"
+vm_exec "$VM" "sudo sed -i 's|VAULT_ADDR_PLACEHOLDER|https://${VAULT_IP}:${VAULT_PORT}|g' /etc/nomad.d/server.hcl"
 
 vm_exec "$VM" "
   sudo chown nomad:nomad /etc/nomad.d/server.hcl

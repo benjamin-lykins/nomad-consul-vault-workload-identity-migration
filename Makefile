@@ -18,6 +18,10 @@ _ensure_exec:
 vms: _ensure_exec
 	$(SCRIPTS)/00-create-vms.sh
 
+## Generate and distribute TLS certificates to all VMs (run after vms, before install)
+tls: _ensure_exec
+	$(SCRIPTS)/00b-setup-tls.sh
+
 ## Install Vault on vault-server VM
 vault: _ensure_exec
 	$(SCRIPTS)/01-install-vault.sh
@@ -46,6 +50,7 @@ verify-legacy: _ensure_exec
 deploy: _ensure_exec
 	@echo "=== Phase 1: Full legacy deployment ==="
 	$(SCRIPTS)/00-create-vms.sh
+	$(SCRIPTS)/00b-setup-tls.sh
 	$(SCRIPTS)/01-install-vault.sh
 	$(SCRIPTS)/02-install-consul.sh
 	$(SCRIPTS)/03-install-nomad-server.sh
@@ -112,9 +117,9 @@ ui:
 	VAULT_IP=$$(multipass info vault-server 2>/dev/null | awk '/IPv4/ { print $$2; exit }') && \
 	CONSUL_IP=$$(multipass info consul-server 2>/dev/null | awk '/IPv4/ { print $$2; exit }') && \
 	NOMAD_IP=$$(multipass info nomad-server 2>/dev/null | awk '/IPv4/ { print $$2; exit }') && \
-	open "http://$${VAULT_IP}:8200" && \
-	open "http://$${CONSUL_IP}:8500" && \
-	open "http://$${NOMAD_IP}:4646"
+	open "https://$${VAULT_IP}:8200" && \
+	open "https://$${CONSUL_IP}:8500" && \
+	open "https://$${NOMAD_IP}:4646"
 
 ## Print saved secrets (for debugging)
 secrets:
@@ -137,10 +142,9 @@ start:
 ## Unseal Vault after a VM restart
 unseal:
 	@source env.sh && \
-	VAULT_IP=$$(multipass info vault-server | awk '/IPv4/ { print $$2; exit }') && \
 	KEY=$$(cat .secrets/vault_unseal_key) && \
 	multipass exec vault-server -- bash -c \
-	  "VAULT_ADDR=http://127.0.0.1:8200 vault operator unseal '$$KEY'" && \
+	  "VAULT_ADDR=https://127.0.0.1:8200 VAULT_CACERT=/opt/tls/ca.crt vault operator unseal '$$KEY'" && \
 	echo "Vault unsealed"
 
 ## Destroy ALL VMs and delete secrets (DESTRUCTIVE)
@@ -166,14 +170,16 @@ help:
 	@echo ""
 	@echo "Usage: make <target>"
 	@echo "Shortcuts:"
-	@echo "  make deploy    — Full Phase 1 (VMs + install + bootstrap + verify)"
+	@echo "  make vms       — Create Multipass VMs"
+	@echo "  make tls       — Generate + distribute TLS certificates (run after vms)"
+	@echo "  make deploy    — Full Phase 1 (VMs + TLS + install + bootstrap + verify)"
 	@echo "  make migrate   — Full Phase 2 (configure WI + update Nomad + verify)"
 	@echo "  make status    — Show VM IPs and service status"
 	@echo "  make ui        — Open all service UIs in browser"
 	@echo "  make clean     — Destroy everything"
 	@echo ""
 
-.PHONY: _ensure_exec vms vault consul nomad-server nomad-client bootstrap \
+.PHONY: _ensure_exec vms tls vault consul nomad-server nomad-client bootstrap \
         verify-legacy deploy migrate-vault migrate-consul coexistence \
         migrate-nomad verify-wi migrate status ui secrets stop start \
         unseal clean shell help

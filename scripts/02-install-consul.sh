@@ -90,12 +90,26 @@ acl {
 retry_join = ["${CONSUL_IP}"]
 
 ports {
+  http     = -1
+  https    = ${CONSUL_PORT}
   grpc     = 8502
   grpc_tls = -1
 }
 
 # Gossip encryption
 encrypt = "${GOSSIP_KEY}"
+
+# TLS — HTTPS on all API and RPC connections
+tls {
+  defaults {
+    ca_file                = "/opt/tls/ca.crt"
+    cert_file              = "/opt/tls/consul-server.crt"
+    key_file               = "/opt/tls/consul-server.key"
+    verify_incoming        = false
+    verify_outgoing        = true
+    verify_server_hostname = false
+  }
+}
 EOF
 
 vm_exec "$VM" "sudo chown consul:consul /etc/consul.d/consul.hcl && sudo chmod 640 /etc/consul.d/consul.hcl"
@@ -110,6 +124,6 @@ vm_exec "$VM" "
   sudo systemctl restart consul
 "
 wait_for_port "$VM" "$CONSUL_PORT" "Consul API"
-ok "=== Consul installed and running on ${CONSUL_IP}:${CONSUL_PORT} ==="
+ok "=== Consul installed and running on https://${CONSUL_IP}:${CONSUL_PORT} ==="
 echo ""
 echo "Next: run scripts/03-install-nomad-server.sh"

@@ -20,7 +20,7 @@ source "$(dirname "$0")/lib/common.sh"
 
 VAULT_IP=$(vm_ip "$VM_VAULT")
 NOMAD_SERVER_IP=$(vm_ip "$VM_NOMAD_SERVER")
-VAULT_ADDR="http://${VAULT_IP}:${VAULT_PORT}"
+VAULT_ADDR="https://${VAULT_IP}:${VAULT_PORT}"
 VAULT_TOKEN=$(load_secret "vault_root_token")
 
 info "============================================================"
@@ -32,7 +32,8 @@ info "============================================================"
 # ============================================================================
 info "Enabling JWT auth method at path 'jwt-nomad'..."
 vm_exec "$VM_VAULT" "
-VAULT_ADDR=http://127.0.0.1:${VAULT_PORT} \
+VAULT_ADDR=https://127.0.0.1:${VAULT_PORT} \
+VAULT_CACERT=/opt/tls/ca.crt \
 VAULT_TOKEN=${VAULT_TOKEN} \
   vault auth enable -path=jwt-nomad jwt 2>/dev/null \
     && echo 'JWT auth enabled' \
@@ -46,10 +47,12 @@ ok "JWT auth method at 'jwt-nomad' is ready"
 # ============================================================================
 info "Configuring JWT auth with Nomad OIDC/JWKS..."
 vm_exec "$VM_VAULT" "
-VAULT_ADDR=http://127.0.0.1:${VAULT_PORT} \
+VAULT_ADDR=https://127.0.0.1:${VAULT_PORT} \
+VAULT_CACERT=/opt/tls/ca.crt \
 VAULT_TOKEN=${VAULT_TOKEN} \
   vault write auth/jwt-nomad/config \
-    jwks_url='http://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json' \
+    jwks_url='https://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json' \
+    oidc_discovery_ca_pem=@/opt/tls/ca.crt \
     default_role='nomad-workloads'
 "
 ok "JWT auth configured with Nomad JWKS endpoint"
@@ -82,7 +85,8 @@ path \"auth/token/renew-self\" {
   capabilities = [\"update\"]
 }
 POLICY
-VAULT_ADDR=http://127.0.0.1:${VAULT_PORT} \
+VAULT_ADDR=https://127.0.0.1:${VAULT_PORT} \
+VAULT_CACERT=/opt/tls/ca.crt \
 VAULT_TOKEN=${VAULT_TOKEN} \
   vault policy write nomad-workloads-wi /tmp/nomad-workloads-wi-policy.hcl
 "
@@ -95,7 +99,8 @@ ok "Vault policy 'nomad-workloads-wi' created"
 # ============================================================================
 info "Creating JWT role 'nomad-workloads'..."
 vm_exec "$VM_VAULT" "
-VAULT_ADDR=http://127.0.0.1:${VAULT_PORT} \
+VAULT_ADDR=https://127.0.0.1:${VAULT_PORT} \
+VAULT_CACERT=/opt/tls/ca.crt \
 VAULT_TOKEN=${VAULT_TOKEN} \
   vault write auth/jwt-nomad/role/nomad-workloads \
     role_type='jwt' \
@@ -118,7 +123,8 @@ ok "JWT role 'nomad-workloads' created"
 # ============================================================================
 info "Verifying JWT auth configuration..."
 vm_exec "$VM_VAULT" "
-VAULT_ADDR=http://127.0.0.1:${VAULT_PORT} \
+VAULT_ADDR=https://127.0.0.1:${VAULT_PORT} \
+VAULT_CACERT=/opt/tls/ca.crt \
 VAULT_TOKEN=${VAULT_TOKEN} \
   vault read auth/jwt-nomad/config
 "
@@ -130,7 +136,7 @@ echo "  Vault Workload Identity Configuration Complete"
 echo "============================================================"
 echo ""
 echo "  JWT auth path:    jwt-nomad"
-echo "  JWKS URL:         http://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json"
+echo "  JWKS URL:         https://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json"
 echo "  JWT audience:     ${NOMAD_VAULT_JWT_AUD}"
 echo "  Role:             nomad-workloads"
 echo "  Policy:           nomad-workloads-wi"

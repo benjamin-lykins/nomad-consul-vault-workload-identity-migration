@@ -39,13 +39,15 @@ service_prefix \"\" {
   policy = \"write\"
 }
 POLICY
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl policy create \
     -name 'nomad-workloads-wi' \
     -description 'Nomad workload identity policy' \
     -rules @/tmp/nomad-workloads-policy.hcl 2>/dev/null || \
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl policy update \
     -name 'nomad-workloads-wi' \
@@ -58,16 +60,19 @@ ok "Consul policy 'nomad-workloads-wi' created"
 # ============================================================================
 info "Creating Consul role 'nomad-workloads'..."
 vm_exec "$VM_CONSUL" "
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl role create \
     -name 'nomad-workloads' \
     -description 'Role for Nomad workload identity tokens' \
     -policy-name 'nomad-workloads-wi' || {
-  ROLE_ID=\$(CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+  ROLE_ID=\$(CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+    CONSUL_CACERT=/opt/tls/ca.crt \
     CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
     consul acl role read -name 'nomad-workloads' -format json | jq -r '.ID')
-  CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+  CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+  CONSUL_CACERT=/opt/tls/ca.crt \
   CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
     consul acl role update \
       -id \"\$ROLE_ID\" \
@@ -82,7 +87,8 @@ ok "Consul role 'nomad-workloads' created"
 info "Configuring Consul JWT auth method..."
 vm_exec "$VM_CONSUL" "cat > /tmp/nomad-workloads-auth.json << 'AUTHCONFIG'
 {
-  \"JWKSURL\": \"http://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json\",
+  \"JWKSURL\": \"https://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json\",
+  \"JWKSCAFILE\": \"/opt/tls/ca.crt\",
   \"JWTSupportedAlgs\": [\"RS256\"],
   \"BoundAudiences\": [\"${NOMAD_CONSUL_JWT_AUD}\"],
   \"ClaimMappings\": {
@@ -93,14 +99,16 @@ vm_exec "$VM_CONSUL" "cat > /tmp/nomad-workloads-auth.json << 'AUTHCONFIG'
   }
 }
 AUTHCONFIG
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl auth-method create \
     -name 'nomad-workloads' \
     -type 'jwt' \
     -description 'Nomad Workload Identity JWT auth' \
     -config @/tmp/nomad-workloads-auth.json || \
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl auth-method update \
     -name 'nomad-workloads' \
@@ -113,7 +121,8 @@ ok "Consul JWT auth method 'nomad-workloads' configured"
 # ============================================================================
 info "Creating Consul binding rule..."
 vm_exec "$VM_CONSUL" "
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl binding-rule create \
     -method 'nomad-workloads' \
@@ -129,7 +138,8 @@ ok "Consul binding rule created"
 # ============================================================================
 info "Verifying Consul JWT auth method..."
 vm_exec "$VM_CONSUL" "
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl auth-method read -name nomad-workloads
 "
@@ -141,7 +151,7 @@ echo "  Consul Workload Identity Configuration Complete"
 echo "============================================================"
 echo ""
 echo "  Auth method:      nomad-workloads (JWT)"
-echo "  JWKS URL:         http://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json"
+echo "  JWKS URL:         https://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json"
 echo "  JWT audience:     ${NOMAD_CONSUL_JWT_AUD}"
 echo "  Binding rule:     nomad-workloads role"
 echo ""

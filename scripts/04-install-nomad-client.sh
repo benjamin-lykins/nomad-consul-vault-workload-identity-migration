@@ -84,8 +84,21 @@ retry_join  = ["${CONSUL_IP}"]
 encrypt     = "${GOSSIP_KEY}"
 
 ports {
+  http     = -1
+  https    = ${CONSUL_PORT}
   grpc     = 8502
   grpc_tls = -1
+}
+
+tls {
+  defaults {
+    ca_file                = "/opt/tls/ca.crt"
+    cert_file              = "/opt/tls/nomad-client.crt"
+    key_file               = "/opt/tls/nomad-client.key"
+    verify_incoming        = false
+    verify_outgoing        = true
+    verify_server_hostname = false
+  }
 }
 EOF
 
@@ -137,13 +150,28 @@ client {
 
 # Consul integration — LEGACY token (injected via systemd env)
 consul {
-  address = "127.0.0.1:8500"
+  address    = "127.0.0.1:8500"
+  ssl        = true
+  ca_file    = "/opt/tls/ca.crt"
+  verify_ssl = true
 }
 
 # Vault integration — LEGACY token (injected via systemd env)
 vault {
-  enabled          = true
-  address          = "http://${VAULT_IP}:${VAULT_PORT}"
+  enabled = true
+  address = "https://${VAULT_IP}:${VAULT_PORT}"
+  ca_file = "/opt/tls/ca.crt"
+}
+
+# TLS — HTTPS for Nomad API and RPC
+tls {
+  http      = true
+  rpc       = true
+  ca_file   = "/opt/tls/ca.crt"
+  cert_file = "/opt/tls/nomad-client.crt"
+  key_file  = "/opt/tls/nomad-client.key"
+  verify_server_hostname = false
+  verify_https_client    = false
 }
 
 # Enable Docker driver

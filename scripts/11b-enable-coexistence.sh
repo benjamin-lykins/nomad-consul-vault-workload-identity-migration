@@ -38,7 +38,8 @@ info "Ensuring Consul auth method 'nomad-workloads' exists..."
 _auth_tmpfile=$(mktemp /tmp/nomad-workloads-auth-XXXXXX.json)
 cat > "$_auth_tmpfile" <<AUTHEOF
 {
-  "JWKSURL": "http://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json",
+  "JWKSURL": "https://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json",
+  "JWKSCAFILE": "/opt/tls/ca.crt",
   "JWTSupportedAlgs": ["RS256"],
   "BoundAudiences": ["${NOMAD_CONSUL_JWT_AUD}"],
   "ClaimMappings": {
@@ -54,28 +55,33 @@ rm -f "$_auth_tmpfile"
 
 # Remove old 'nomad-wi' method if it exists from a previous run
 vm_exec "$VM_CONSUL" "
-for BR_ID in \$(CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+for BR_ID in \$(CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+    CONSUL_CACERT=/opt/tls/ca.crt \
     CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
     consul acl binding-rule list -method nomad-wi -format json 2>/dev/null \
     | jq -r '.[].ID' 2>/dev/null); do
-  CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+  CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+  CONSUL_CACERT=/opt/tls/ca.crt \
   CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
     consul acl binding-rule delete -id \"\$BR_ID\" 2>/dev/null || true
 done
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl auth-method delete -name nomad-wi 2>/dev/null || true
 "
 
 vm_exec "$VM_CONSUL" "
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl auth-method create \
     -name 'nomad-workloads' \
     -type 'jwt' \
     -description 'Nomad Workload Identity JWT auth' \
     -config @/tmp/nomad-workloads-auth.json || \
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl auth-method update \
     -name 'nomad-workloads' \
@@ -83,7 +89,8 @@ CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
 "
 
 vm_exec "$VM_CONSUL" "
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl binding-rule create \
     -method 'nomad-workloads' \
@@ -119,7 +126,8 @@ ok "Consul ACLs enabled on Nomad VM agents"
 # ============================================================================
 info "Creating minimal Consul process tokens for Nomad server and client..."
 CONSUL_NOMAD_PROCESS_TOKEN=$(vm_exec "$VM_CONSUL" "
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl token create \
     -description 'Nomad server process (minimal) — WI era' \
@@ -128,7 +136,8 @@ CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
 save_secret "consul_nomad_process_token" "$CONSUL_NOMAD_PROCESS_TOKEN"
 
 CONSUL_NOMAD_CLIENT_PROCESS_TOKEN=$(vm_exec "$VM_CONSUL" "
-CONSUL_HTTP_ADDR=http://127.0.0.1:${CONSUL_PORT} \
+CONSUL_HTTP_ADDR=https://127.0.0.1:${CONSUL_PORT} \
+CONSUL_CACERT=/opt/tls/ca.crt \
 CONSUL_HTTP_TOKEN=${CONSUL_BOOTSTRAP_TOKEN} \
   consul acl token create \
     -description 'Nomad client process (minimal) — WI era' \
@@ -180,6 +189,9 @@ consul {
   auto_advertise      = true
   server_auto_join    = true
   client_auto_join    = true
+  ssl                 = true
+  ca_file             = "/opt/tls/ca.crt"
+  verify_ssl          = true
 
   service_identity {
     aud = ["${NOMAD_CONSUL_JWT_AUD}"]
@@ -194,7 +206,8 @@ consul {
 # Vault — COEXISTENCE (legacy token path + workload identity path both active)
 vault {
   enabled = true
-  address = "http://${VAULT_IP}:${VAULT_PORT}"
+  address = "https://${VAULT_IP}:${VAULT_PORT}"
+  ca_file = "/opt/tls/ca.crt"
 
   # Legacy: generates child tokens from this role for jobs without WI.
   # Removed during cutover in scripts/12-update-nomad-wi.sh.
@@ -245,7 +258,10 @@ client {
 
 # Consul — COEXISTENCE (process token in env, task JWT identities configured)
 consul {
-  address = "127.0.0.1:8500"
+  address    = "127.0.0.1:8500"
+  ssl        = true
+  ca_file    = "/opt/tls/ca.crt"
+  verify_ssl = true
 
   service_identity {
     aud = ["${NOMAD_CONSUL_JWT_AUD}"]
@@ -260,7 +276,8 @@ consul {
 # Vault — address only; WI config is inherited from the server
 vault {
   enabled = true
-  address = "http://${VAULT_IP}:${VAULT_PORT}"
+  address = "https://${VAULT_IP}:${VAULT_PORT}"
+  ca_file = "/opt/tls/ca.crt"
 }
 
 plugin "docker" {
@@ -321,7 +338,7 @@ ok "Nomad client restarted"
 
 sleep 5
 vm_exec "$VM_NOMAD_SERVER" \
-  "NOMAD_ADDR=http://127.0.0.1:${NOMAD_PORT} nomad server members"
+  "NOMAD_ADDR=https://127.0.0.1:${NOMAD_PORT} NOMAD_CACERT=/opt/tls/ca.crt nomad server members"
 ok "Nomad cluster healthy in coexistence mode"
 
 echo ""

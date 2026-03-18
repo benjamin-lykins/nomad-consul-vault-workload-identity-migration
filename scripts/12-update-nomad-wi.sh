@@ -54,6 +54,9 @@ consul {
   auto_advertise      = true
   server_auto_join    = true
   client_auto_join    = true
+  ssl                 = true
+  ca_file             = "/opt/tls/ca.crt"
+  verify_ssl          = true
 
   service_identity {
     aud = ["${NOMAD_CONSUL_JWT_AUD}"]
@@ -67,7 +70,8 @@ consul {
 
 vault {
   enabled = true
-  address = "http://${VAULT_IP}:${VAULT_PORT}"
+  address = "https://${VAULT_IP}:${VAULT_PORT}"
+  ca_file = "/opt/tls/ca.crt"
 
   jwt_auth_backend_path = "jwt-nomad"
   default_identity {
@@ -122,7 +126,7 @@ ok "Nomad client restarted"
 
 sleep 5
 vm_exec "$VM_NOMAD_SERVER" \
-  "NOMAD_ADDR=http://127.0.0.1:${NOMAD_PORT} nomad server members"
+  "NOMAD_ADDR=https://127.0.0.1:${NOMAD_PORT} NOMAD_CACERT=/opt/tls/ca.crt nomad server members"
 ok "Nomad cluster members verified"
 
 echo ""

@@ -114,3 +114,9 @@ apt-get update -y
 '
 
 export HASHICORP_REPO_SCRIPT
+
+# ---------------------------------------------------------------------------
+# TLS — cert paths on VMs (populated by 00b-setup-tls.sh)
+# ---------------------------------------------------------------------------
+TLS_DIR_VM="/opt/tls"
+TLS_CA_VM="${TLS_DIR_VM}/ca.crt"

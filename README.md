@@ -54,7 +54,7 @@ Workload Identity was introduced in Nomad 1.7, but Nomad 1.8 was the first LTS r
 # Prerequisites
 source env.sh
 
-# Phase 1 — Full legacy deployment
+# Phase 1 — Full legacy deployment (includes TLS setup)
 make deploy
 
 # Verify legacy works
@@ -132,9 +132,9 @@ sudo apt-get install -y wslu
 
 # Then open UIs manually
 source env.sh
-wslview "http://$(multipass info vault-server | awk '/IPv4/{print $2}'):8200"
-wslview "http://$(multipass info consul-server | awk '/IPv4/{print $2}'):8500"
-wslview "http://$(multipass info nomad-server | awk '/IPv4/{print $2}'):4646"
+wslview "https://$(multipass info vault-server | awk '/IPv4/{print $2}'):8200"
+wslview "https://$(multipass info consul-server | awk '/IPv4/{print $2}'):8500"
+wslview "https://$(multipass info nomad-server | awk '/IPv4/{print $2}'):4646"
 ```
 
 **Known WSL2 quirks**:
@@ -180,6 +180,34 @@ Creates 4 Multipass VMs using Ubuntu 22.04 and `cloud-init/base.yaml`.
 
 ---
 
+#### Step 00b — TLS Certificate Setup
+
+```bash
+make tls
+# or: scripts/00b-setup-tls.sh
+```
+
+Generates a self-signed CA and per-VM TLS certificates, then distributes them to every VM. Must run **after** Step 0 (VMs must be up) and **before** Step 1 (services are installed with TLS from the start).
+
+- Generates a 4096-bit RSA root CA (stored in `.secrets/tls/`, reused on subsequent runs)
+- Issues a 2048-bit RSA server certificate for each VM with IP SANs (`<vm-ip>`, `127.0.0.1`) and DNS SANs (`<vm-name>`, `localhost`)
+- Copies certs to `/opt/tls/` on each VM:
+  - `ca.crt` — trusted root CA
+  - `<vm-name>.crt` — server certificate
+  - `<vm-name>.key` — private key (mode 600)
+- Installs the CA into the system trust store (`update-ca-certificates`) on all VMs so all tools trust it automatically
+
+| VM | Certificate |
+|----|-------------|
+| `vault-server` | `/opt/tls/vault-server.{crt,key}` |
+| `consul-server` | `/opt/tls/consul-server.{crt,key}` |
+| `nomad-server` | `/opt/tls/nomad-server.{crt,key}` |
+| `nomad-client` | `/opt/tls/nomad-client.{crt,key}` |
+
+> Re-running this script after a VM restart regenerates certificates with the current VM IPs (IP SANs must match). The CA is reused so the system trust store stays valid.
+
+---
+
 #### Step 1 — Install Vault
 
 ```bash
@@ -188,8 +216,8 @@ make vault
 ```
 
 - Installs Vault via HashiCorp apt repo
-- Writes `/etc/vault.d/vault.hcl` (Raft storage, TLS disabled for lab)
-- Starts `vault.service`
+- Writes `/etc/vault.d/vault.hcl` (Raft storage, TLS enabled — certs from `/opt/tls/`)
+- Starts `vault.service` (HTTPS on port 8200)
 
 ---
 
@@ -202,7 +230,8 @@ make consul
 
 - Installs Consul with ACLs enabled (`default_policy = "deny"`)
 - Generates and saves gossip encryption key
-- Starts `consul.service`
+- Configures TLS (`tls {}` block, certs from `/opt/tls/`), disables plain HTTP, enables HTTPS on port 8500
+- Starts `consul.service` (HTTPS on port 8500)
 
 ---
 
@@ -215,8 +244,9 @@ make nomad-server
 
 - Installs Nomad + Consul agent (client mode)
 - Writes **legacy** `/etc/nomad.d/server.hcl`:
-  - `vault { enabled = true; address = "..." }` — token injected later
-  - `consul { address = "..." }` — token injected later
+  - `vault { enabled = true; address = "https://..."; ca_file = "..." }` — token injected later
+  - `consul { address = "..."; ssl = true; ca_file = "..." }` — token injected later
+  - `tls { http = true; rpc = true; cert_file = "..."; key_file = "..." }` — HTTPS on port 4646
 
 ---
 
@@ -228,7 +258,7 @@ make nomad-client
 ```
 
 - Installs Nomad + Consul agent (client mode) + Docker
-- Writes **legacy** `/etc/nomad.d/client.hcl`
+- Writes **legacy** `/etc/nomad.d/client.hcl` with TLS stanzas (same cert layout as server)
 
 ---
 
@@ -515,6 +545,19 @@ make clean
 
 ## Troubleshooting
 
+**Browser shows "Your connection is not private" / certificate warning:**
+
+Expected — the lab uses a self-signed CA. Click through the warning or import `.secrets/tls/ca.crt` into your browser/OS trust store to avoid it.
+
+**Service fails to start after VM restart (IP changed):**
+
+Multipass VM IPs can change after a restart. Certificates have IP SANs baked in, so a new IP means the old cert is invalid. Re-run:
+```bash
+make tls   # regenerates certs for current IPs
+make start # (if VMs were stopped)
+make unseal
+```
+
 **Vault sealed after restart:**
 ```bash
 make unseal
@@ -528,12 +571,12 @@ NOMAD_ADDR=http://127.0.0.1:4646 nomad node status
 
 **JWT auth failing:**
 ```bash
-# Check JWKS endpoint is reachable from Vault VM
+# Check JWKS endpoint is reachable from Vault VM (uses CA cert for TLS)
 make shell VM=vault-server
-curl http://<nomad-server-ip>:4646/.well-known/jwks.json | jq .
+curl --cacert /opt/tls/ca.crt https://<nomad-server-ip>:4646/.well-known/jwks.json | jq .
 
 # Check Vault JWT config
-VAULT_ADDR=http://127.0.0.1:8200 vault read auth/jwt-nomad/config
+VAULT_ADDR=https://127.0.0.1:8200 VAULT_CACERT=/opt/tls/ca.crt vault read auth/jwt-nomad/config
 ```
 
 **Task can't read Vault secret:**
@@ -603,7 +646,9 @@ Once all jobs are confirmed working on workload identity:
 
 ## Security Notes
 
-- `.secrets/` contains plaintext tokens — **never commit this directory**
-- TLS is disabled for this lab — enable it in production
+- `.secrets/` contains plaintext tokens and CA private key — **never commit this directory**
+- TLS is enabled with a self-signed CA — browser UIs will show a certificate warning (expected for lab)
+- The self-signed CA is only valid for the lab's IP addresses; re-run `make tls` after VM restarts that change IPs
 - The Vault root token is saved for lab convenience — revoke it post-setup in production
 - Single-node Raft (Vault) and single-server Consul/Nomad are not HA — scale out for production
+- For production: replace the self-signed CA with certs signed by your PKI, enable mTLS (`verify_incoming = true`)

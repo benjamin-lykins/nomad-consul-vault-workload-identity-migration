@@ -17,6 +17,7 @@ VAULT_IP=$(vm_ip "$VM_VAULT")
 CONSUL_IP=$(vm_ip "$VM_CONSUL")
 NOMAD_SERVER_IP=$(vm_ip "$VM_NOMAD_SERVER")
 VAULT_TOKEN=$(load_secret "vault_root_token")
+VAULT_CACERT="${TLS_CA_VM}"
 
 info "============================================================"
 info "  STEP 13: Verifying Workload Identity migration"
@@ -45,10 +46,10 @@ fi
 # ============================================================================
 info "Checking Nomad cluster health..."
 vm_exec "$VM_NOMAD_SERVER" \
-  "NOMAD_ADDR=http://127.0.0.1:${NOMAD_PORT} nomad server members"
+  "NOMAD_ADDR=https://127.0.0.1:${NOMAD_PORT} NOMAD_CACERT=/opt/tls/ca.crt nomad server members"
 
 NODES=$(vm_exec "$VM_NOMAD_SERVER" \
-  "NOMAD_ADDR=http://127.0.0.1:${NOMAD_PORT} nomad node status")
+  "NOMAD_ADDR=https://127.0.0.1:${NOMAD_PORT} NOMAD_CACERT=/opt/tls/ca.crt nomad node status")
 echo "$NODES" | grep -q "ready" && ok "Nomad client node: ready" \
   || warn "Nomad client node not yet ready — may need more time"
 
@@ -57,8 +58,8 @@ echo "$NODES" | grep -q "ready" && ok "Nomad client node: ready" \
 # ============================================================================
 info "Verifying Vault can reach Nomad JWKS endpoint..."
 vm_exec "$VM_VAULT" \
-  "curl -sf http://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json | jq '.keys | length'" \
-  && ok "Vault can reach Nomad JWKS endpoint" \
+  "curl -sf --cacert /opt/tls/ca.crt https://${NOMAD_SERVER_IP}:${NOMAD_PORT}/.well-known/jwks.json | jq '.keys | length'" \
+  && ok "Vault can reach Nomad JWKS endpoint (HTTPS)" \
   || die "Vault cannot reach Nomad JWKS endpoint"
 
 # ============================================================================
@@ -66,7 +67,8 @@ vm_exec "$VM_VAULT" \
 # ============================================================================
 info "Stopping legacy demo job..."
 vm_exec "$VM_NOMAD_SERVER" \
-  "NOMAD_ADDR=http://127.0.0.1:${NOMAD_PORT} \
+  "NOMAD_ADDR=https://127.0.0.1:${NOMAD_PORT} \
+  NOMAD_CACERT=/opt/tls/ca.crt \
   nomad job stop demo-legacy 2>/dev/null || true"
 ok "Legacy job stopped"
 
@@ -75,14 +77,16 @@ JOB_FILE="${REPO_ROOT}/jobs/demo-wi.nomad"
 vm_push "$VM_NOMAD_SERVER" "$JOB_FILE" "/tmp/demo-wi.nomad"
 
 vm_exec "$VM_NOMAD_SERVER" \
-  "NOMAD_ADDR=http://127.0.0.1:${NOMAD_PORT} \
+  "NOMAD_ADDR=https://127.0.0.1:${NOMAD_PORT} \
+  NOMAD_CACERT=/opt/tls/ca.crt \
   nomad job run /tmp/demo-wi.nomad"
 
 # Wait for the WI job to reach running state
 info "Waiting for workload identity demo job to start..."
 for i in $(seq 1 40); do
   STATUS=$(vm_exec "$VM_NOMAD_SERVER" \
-    "NOMAD_ADDR=http://127.0.0.1:${NOMAD_PORT} \
+    "NOMAD_ADDR=https://127.0.0.1:${NOMAD_PORT} \
+    NOMAD_CACERT=/opt/tls/ca.crt \
     nomad job status demo-wi 2>/dev/null | grep -E '^Status' | head -1 | awk '{print \$3}'" || echo "pending")
   [[ "$STATUS" == "running" ]] && break
   echo "  Status: ${STATUS} (attempt $i/40)"
@@ -97,14 +101,16 @@ ok "Workload identity demo job is running"
 info "Fetching allocation ID for demo-wi job..."
 sleep 5  # let the task write its output
 ALLOC_ID=$(vm_exec "$VM_NOMAD_SERVER" \
-  "NOMAD_ADDR=http://127.0.0.1:${NOMAD_PORT} \
+  "NOMAD_ADDR=https://127.0.0.1:${NOMAD_PORT} \
+  NOMAD_CACERT=/opt/tls/ca.crt \
   nomad job allocs demo-wi -json 2>/dev/null | jq -r '.[0].ID'")
 
 if [[ -n "$ALLOC_ID" && "$ALLOC_ID" != "null" ]]; then
   ok "Allocation ID: ${ALLOC_ID}"
   info "Reading task logs (stdout)..."
   vm_exec "$VM_NOMAD_SERVER" \
-    "NOMAD_ADDR=http://127.0.0.1:${NOMAD_PORT} \
+    "NOMAD_ADDR=https://127.0.0.1:${NOMAD_PORT} \
+    NOMAD_CACERT=/opt/tls/ca.crt \
     nomad alloc logs ${ALLOC_ID} reader 2>/dev/null | tail -20" || true
 else
   warn "Could not retrieve allocation ID — check 'nomad job status demo-wi'"
@@ -115,7 +121,8 @@ fi
 # ============================================================================
 info "Checking for old Nomad token leases in Vault..."
 LEASE_COUNT=$(vm_exec "$VM_VAULT" "
-VAULT_ADDR=http://127.0.0.1:${VAULT_PORT} \
+VAULT_ADDR=https://127.0.0.1:${VAULT_PORT} \
+VAULT_CACERT=/opt/tls/ca.crt \
 VAULT_TOKEN=${VAULT_TOKEN} \
   vault list sys/leases/lookup/auth/token/create/nomad-cluster 2>/dev/null \
   | grep -c '^[0-9a-f-]' || echo '0'")
@@ -138,9 +145,9 @@ echo ""
 echo "  Legacy job:    STOPPED"
 echo "  WI demo job:   RUNNING"
 echo ""
-echo "  Vault UI:   http://${VAULT_IP}:${VAULT_PORT}"
-echo "  Consul UI:  http://${CONSUL_IP}:${CONSUL_PORT}"
-echo "  Nomad UI:   http://${NOMAD_SERVER_IP}:${NOMAD_PORT}"
+echo "  Vault UI:   https://${VAULT_IP}:${VAULT_PORT}"
+echo "  Consul UI:  https://${CONSUL_IP}:${CONSUL_PORT}"
+echo "  Nomad UI:   https://${NOMAD_SERVER_IP}:${NOMAD_PORT}"
 echo "============================================================"
 echo ""
 echo "Migration complete! See README.md for next steps:"

@@ -64,11 +64,12 @@ storage "raft" {
 }
 
 listener "tcp" {
-  address     = "0.0.0.0:${VAULT_PORT}"
-  tls_disable = true   # TLS disabled for lab — enable in production
+  address       = "0.0.0.0:${VAULT_PORT}"
+  tls_cert_file = "/opt/tls/vault-server.crt"
+  tls_key_file  = "/opt/tls/vault-server.key"
 }
 
-api_addr     = "http://${VAULT_IP}:${VAULT_PORT}"
+api_addr     = "https://${VAULT_IP}:${VAULT_PORT}"
 cluster_addr = "https://${VAULT_IP}:8201"
 EOF
 
@@ -84,6 +85,6 @@ vm_exec "$VM" "
   sudo systemctl restart vault
 "
 wait_for_port "$VM" "$VAULT_PORT" "Vault API"
-ok "=== Vault installed and running on ${VAULT_IP}:${VAULT_PORT} ==="
+ok "=== Vault installed and running on https://${VAULT_IP}:${VAULT_PORT} ==="
 echo ""
 echo "Next: run scripts/02-install-consul.sh"
