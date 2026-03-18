@@ -76,11 +76,12 @@ info "Waiting for legacy job to start..."
 for i in $(seq 1 30); do
   STATUS=$(vm_exec "$VM_NOMAD_SERVER" \
     "NOMAD_ADDR=http://127.0.0.1:${NOMAD_PORT} \
-    nomad job status demo-legacy -short 2>/dev/null | grep -E '^Status' | awk '{print \$3}'" || echo "pending")
+    nomad job status demo-legacy 2>/dev/null | grep -E '^Status' | head -1 | awk '{print \$3}'" || echo "pending")
   [[ "$STATUS" == "running" ]] && break
   echo "  Status: ${STATUS} (attempt $i/30)"
   sleep 5
 done
+[[ "$STATUS" == "running" ]] || die "Legacy demo job did not reach running state"
 ok "Legacy demo job is running"
 
 # ---------------------------------------------------------------------------
