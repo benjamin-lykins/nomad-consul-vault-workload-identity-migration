@@ -14,6 +14,15 @@ export CONSUL_VERSION="1.21.5"
 export NOMAD_VERSION="1.8.4"
 
 # ---------------------------------------------------------------------------
+# Enterprise licenses (optional — leave empty to use Community Edition)
+# Set each to the path of a .hclic file on your host machine.
+# If the file is absent or the variable is empty, CE packages are used.
+# ---------------------------------------------------------------------------
+export VAULT_LICENSE_FILE="/license/vault.hclic"    # e.g., /path/to/vault.hclic
+export CONSUL_LICENSE_FILE="/license/consul.hclic"   # e.g., /path/to/consul.hclic
+export NOMAD_LICENSE_FILE="/license/nomad.hclic"    # e.g., /path/to/nomad.hclic
+
+# ---------------------------------------------------------------------------
 # Multipass VM names
 # ---------------------------------------------------------------------------
 export VM_VAULT="vault-server"

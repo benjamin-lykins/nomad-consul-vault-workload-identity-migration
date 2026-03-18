@@ -13,6 +13,9 @@ VAULT_IP=$(vm_ip "$VM")
 
 info "=== Installing Vault ${VAULT_VERSION} on ${VM} (${VAULT_IP}) ==="
 
+_VAULT_PKG=$(ent_pkg "vault" "${VAULT_LICENSE_FILE:-}")
+_VAULT_APT_VER=$(ent_ver "$VAULT_VERSION" "${VAULT_LICENSE_FILE:-}")
+
 # ---------------------------------------------------------------------------
 # 1. Install Vault via HashiCorp apt repo
 # ---------------------------------------------------------------------------
@@ -27,16 +30,16 @@ echo \"deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
   | sudo tee /etc/apt/sources.list.d/hashicorp.list > /dev/null
 sudo apt-get update -qq
 # Install exact version; fall back to latest in the series if not found
-if ! sudo apt-get install -y vault=${VAULT_VERSION}-1 2>/dev/null; then
-  echo 'Exact version not found, installing latest vault...'
-  sudo apt-get install -y vault
+if ! sudo apt-get install -y ${_VAULT_PKG}=${_VAULT_APT_VER}-1 2>/dev/null; then
+  echo 'Exact version not found, installing latest ${_VAULT_PKG}...'
+  sudo apt-get install -y ${_VAULT_PKG}
 fi
 vault version
 "
 ok "Vault binary installed"
 
 # ---------------------------------------------------------------------------
-# 2. Create directories
+# 2. Create directories + install enterprise license if provided
 # ---------------------------------------------------------------------------
 vm_exec "$VM" "
   sudo mkdir -p /opt/vault/{data,tls,plugins}
@@ -46,6 +49,8 @@ vm_exec "$VM" "
   sudo chown vault:vault /opt/tls/vault-server.key
   sudo chmod 600 /opt/tls/vault-server.key
 "
+install_ent_license "$VM" "${VAULT_LICENSE_FILE:-}" \
+  "/etc/vault.d/vault.hclic" "vault" "/etc/vault.d"
 
 # ---------------------------------------------------------------------------
 # 3. Write Vault configuration

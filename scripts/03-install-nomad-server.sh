@@ -16,6 +16,11 @@ VAULT_IP=$(vm_ip "$VM_VAULT")
 
 info "=== Installing Nomad ${NOMAD_VERSION} on ${VM} (${NOMAD_IP}) ==="
 
+_NOMAD_PKG=$(ent_pkg "nomad" "${NOMAD_LICENSE_FILE:-}")
+_NOMAD_APT_VER=$(ent_ver "$NOMAD_VERSION" "${NOMAD_LICENSE_FILE:-}")
+_CONSUL_PKG=$(ent_pkg "consul" "${CONSUL_LICENSE_FILE:-}")
+_CONSUL_APT_VER=$(ent_ver "$CONSUL_VERSION" "${CONSUL_LICENSE_FILE:-}")
+
 # ---------------------------------------------------------------------------
 # 1. Install Nomad (and consul agent for service registration)
 # ---------------------------------------------------------------------------
@@ -29,9 +34,9 @@ echo \"deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
   https://apt.releases.hashicorp.com \$(lsb_release -cs) main\" \
   | sudo tee /etc/apt/sources.list.d/hashicorp.list > /dev/null
 sudo apt-get update -qq
-if ! sudo apt-get install -y nomad=${NOMAD_VERSION}-1 consul=${CONSUL_VERSION}-1 2>/dev/null; then
+if ! sudo apt-get install -y ${_NOMAD_PKG}=${_NOMAD_APT_VER}-1 ${_CONSUL_PKG}=${_CONSUL_APT_VER}-1 2>/dev/null; then
   echo 'Exact version(s) not found, installing latest...'
-  sudo apt-get install -y nomad consul
+  sudo apt-get install -y ${_NOMAD_PKG} ${_CONSUL_PKG}
 fi
 nomad version
 consul version
@@ -39,7 +44,7 @@ consul version
 ok "Nomad and Consul agent installed"
 
 # ---------------------------------------------------------------------------
-# 2. Create directories
+# 2. Create directories + install enterprise licenses if provided
 # ---------------------------------------------------------------------------
 vm_exec "$VM" "
   sudo mkdir -p /opt/nomad/{data,plugins}
@@ -54,6 +59,10 @@ vm_exec "$VM" "
   sudo chown consul:consul /opt/tls/nomad-server-consul.key
   sudo chmod 600 /opt/tls/nomad-server-consul.key
 "
+# Nomad Enterprise: license required on server only (not clients)
+install_ent_license "$VM" "${NOMAD_LICENSE_FILE:-}" \
+  "/etc/nomad.d/nomad.hclic" "nomad" "/etc/nomad.d"
+# Consul Enterprise: license propagates from consul-server to agents automatically
 
 # ---------------------------------------------------------------------------
 # 3. Install Consul agent config (client mode, joins consul-server)

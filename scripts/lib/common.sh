@@ -120,3 +120,41 @@ export HASHICORP_REPO_SCRIPT
 # ---------------------------------------------------------------------------
 TLS_DIR_VM="/opt/tls"
 TLS_CA_VM="${TLS_DIR_VM}/ca.crt"
+
+# ---------------------------------------------------------------------------
+# Enterprise helpers
+# ---------------------------------------------------------------------------
+
+# Return the apt package name: <base>-enterprise if a license file exists, else <base>
+# Usage: pkg=$(ent_pkg "vault" "${VAULT_LICENSE_FILE:-}")
+ent_pkg() {
+  local base="$1" license_file="${2:-}"
+  [[ -n "$license_file" && -f "$license_file" ]] && echo "${base}-enterprise" || echo "${base}"
+}
+
+# Return the apt version string: <ver>+ent if a license file exists, else <ver>
+# Usage: ver=$(ent_ver "$VAULT_VERSION" "${VAULT_LICENSE_FILE:-}")
+ent_ver() {
+  local version="$1" license_file="${2:-}"
+  [[ -n "$license_file" && -f "$license_file" ]] && echo "${version}+ent" || echo "${version}"
+}
+
+# Copy a license file to a VM and write a license_path config fragment.
+# No-op if LICENSE_FILE is empty or the file does not exist.
+# Usage: install_ent_license "$VM" "${VAULT_LICENSE_FILE:-}" \
+#          /etc/vault.d/vault.hclic vault /etc/vault.d
+install_ent_license() {
+  local vm="$1" license_file="${2:-}" dst="$3" owner="$4" config_dir="$5"
+  [[ -z "$license_file" || ! -f "$license_file" ]] && return 0
+  info "Installing enterprise license on ${vm}..."
+  multipass transfer "$license_file" "${vm}:/tmp/ent.hclic"
+  vm_exec "$vm" "
+    sudo mv /tmp/ent.hclic ${dst}
+    sudo chown ${owner}:${owner} ${dst}
+    sudo chmod 640 ${dst}
+    echo 'license_path = \"${dst}\"' | sudo tee ${config_dir}/license.hcl > /dev/null
+    sudo chown ${owner}:${owner} ${config_dir}/license.hcl
+    sudo chmod 640 ${config_dir}/license.hcl
+  "
+  ok "Enterprise license configured on ${vm}"
+}

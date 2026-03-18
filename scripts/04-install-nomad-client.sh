@@ -16,6 +16,11 @@ NOMAD_SERVER_IP=$(vm_ip "$VM_NOMAD_SERVER")
 
 info "=== Installing Nomad ${NOMAD_VERSION} on ${VM} (${CLIENT_IP}) ==="
 
+_NOMAD_PKG=$(ent_pkg "nomad" "${NOMAD_LICENSE_FILE:-}")
+_NOMAD_APT_VER=$(ent_ver "$NOMAD_VERSION" "${NOMAD_LICENSE_FILE:-}")
+_CONSUL_PKG=$(ent_pkg "consul" "${CONSUL_LICENSE_FILE:-}")
+_CONSUL_APT_VER=$(ent_ver "$CONSUL_VERSION" "${CONSUL_LICENSE_FILE:-}")
+
 # ---------------------------------------------------------------------------
 # 1. Install Nomad + Consul agent
 # ---------------------------------------------------------------------------
@@ -29,15 +34,15 @@ echo \"deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
   https://apt.releases.hashicorp.com \$(lsb_release -cs) main\" \
   | sudo tee /etc/apt/sources.list.d/hashicorp.list > /dev/null
 sudo apt-get update -qq
-if ! sudo apt-get install -y nomad=${NOMAD_VERSION}-1 consul=${CONSUL_VERSION}-1 2>/dev/null; then
-  sudo apt-get install -y nomad consul
+if ! sudo apt-get install -y ${_NOMAD_PKG}=${_NOMAD_APT_VER}-1 ${_CONSUL_PKG}=${_CONSUL_APT_VER}-1 2>/dev/null; then
+  sudo apt-get install -y ${_NOMAD_PKG} ${_CONSUL_PKG}
 fi
 nomad version && consul version
 "
 ok "Nomad and Consul agent installed on client VM"
 
 # ---------------------------------------------------------------------------
-# 2. Directories
+# 2. Directories + install enterprise licenses if provided
 # ---------------------------------------------------------------------------
 vm_exec "$VM" "
   sudo mkdir -p /opt/nomad/{data,plugins,alloc}
@@ -51,6 +56,7 @@ vm_exec "$VM" "
   sudo chown consul:consul /opt/tls/nomad-client-consul.key
   sudo chmod 600 /opt/tls/nomad-client-consul.key
 "
+# Nomad Enterprise: license is only required on server nodes, not clients
 
 # ---------------------------------------------------------------------------
 # 3. Install Docker (Nomad jobs will use the docker driver in the demo)

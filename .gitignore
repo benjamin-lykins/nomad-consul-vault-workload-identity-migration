@@ -1,5 +1,12 @@
 # Never commit secrets
+# Although these are just for lab convenience, 
+# they still contain sensitive info (Vault root token, CA private key) 
+# that should be kept out of git history
 .secrets/
+
+# Never commit license keys
+# I mean, unless you want to share them with the world... but still, better to keep them out of git history
+*.hclic
 
 # macOS
 .DS_Store

@@ -15,6 +15,9 @@ NOMAD_CLIENT_IP=$(vm_ip "$VM_NOMAD_CLIENT")
 
 info "=== Installing Consul ${CONSUL_VERSION} on ${VM} (${CONSUL_IP}) ==="
 
+_CONSUL_PKG=$(ent_pkg "consul" "${CONSUL_LICENSE_FILE:-}")
+_CONSUL_APT_VER=$(ent_ver "$CONSUL_VERSION" "${CONSUL_LICENSE_FILE:-}")
+
 # ---------------------------------------------------------------------------
 # 1. Install Consul
 # ---------------------------------------------------------------------------
@@ -28,9 +31,9 @@ echo \"deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
   https://apt.releases.hashicorp.com \$(lsb_release -cs) main\" \
   | sudo tee /etc/apt/sources.list.d/hashicorp.list > /dev/null
 sudo apt-get update -qq
-if ! sudo apt-get install -y consul=${CONSUL_VERSION}-1 2>/dev/null; then
-  echo 'Exact version not found, installing latest consul...'
-  sudo apt-get install -y consul
+if ! sudo apt-get install -y ${_CONSUL_PKG}=${_CONSUL_APT_VER}-1 2>/dev/null; then
+  echo 'Exact version not found, installing latest ${_CONSUL_PKG}...'
+  sudo apt-get install -y ${_CONSUL_PKG}
 fi
 consul version
 "
@@ -53,6 +56,8 @@ vm_exec "$VM" "
   sudo chown consul:consul /opt/tls/consul-server.key
   sudo chmod 600 /opt/tls/consul-server.key
 "
+install_ent_license "$VM" "${CONSUL_LICENSE_FILE:-}" \
+  "/etc/consul.d/consul.hclic" "consul" "/etc/consul.d"
 
 # ---------------------------------------------------------------------------
 # 4. Write Consul server configuration
