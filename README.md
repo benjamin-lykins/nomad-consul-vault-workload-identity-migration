@@ -11,13 +11,17 @@ Supported host platforms: **macOS**, **Linux**, **Windows (WSL2)**.
 
 ## Versions
 
+Workload Identity was introduced in Nomad 1.7, but Nomad 1.8 was the first LTS release.
+
+> Edit `env.sh` to pin exact patch versions before running.
+
 | Service | Default Version |
 |---------|---------|
 | Vault   | 1.16.x  |
 | Consul  | 1.21.x  |
 | Nomad   | 1.8.x   |
 
-> Edit `env.sh` to pin exact patch versions before running.
+
 
 ## Architecture
 
@@ -47,6 +51,9 @@ Supported host platforms: **macOS**, **Linux**, **Windows (WSL2)**.
 ## Quick Start
 
 ```bash
+# Prerequisites
+source env.sh
+
 # Phase 1 — Full legacy deployment
 make deploy
 
