@@ -50,7 +50,7 @@ vm_exec "$VM" "
   sudo chmod 600 /opt/tls/vault-server.key
 "
 install_ent_license "$VM" "${VAULT_LICENSE_FILE:-}" \
-  "/etc/vault.d/vault.hclic" "vault" "/etc/vault.d"
+  "/etc/vault.d/vault.hclic" "vault" "/etc/vault.d/vault.env" "VAULT_LICENSE_PATH"
 
 # ---------------------------------------------------------------------------
 # 3. Write Vault configuration

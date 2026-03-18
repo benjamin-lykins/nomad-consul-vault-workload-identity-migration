@@ -144,7 +144,7 @@ ent_ver() {
 # Usage: install_ent_license "$VM" "${VAULT_LICENSE_FILE:-}" \
 #          /etc/vault.d/vault.hclic vault /etc/vault.d
 install_ent_license() {
-  local vm="$1" license_file="${2:-}" dst="$3" owner="$4" config_dir="$5"
+  local vm="$1" license_file="${2:-}" dst="$3" owner="$4" env_file="$5" env_var="$6"
   [[ -z "$license_file" || ! -f "$license_file" ]] && return 0
   info "Installing enterprise license on ${vm}..."
   multipass transfer "$license_file" "${vm}:/tmp/ent.hclic"
@@ -152,9 +152,7 @@ install_ent_license() {
     sudo mv /tmp/ent.hclic ${dst}
     sudo chown ${owner}:${owner} ${dst}
     sudo chmod 640 ${dst}
-    echo 'license_path = \"${dst}\"' | sudo tee ${config_dir}/license.hcl > /dev/null
-    sudo chown ${owner}:${owner} ${config_dir}/license.hcl
-    sudo chmod 640 ${config_dir}/license.hcl
+    echo '${env_var}=${dst}' | sudo tee ${env_file} > /dev/null
   "
-  ok "Enterprise license configured on ${vm}"
+  ok "Enterprise license installed on ${vm}:${dst}"
 }

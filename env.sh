@@ -18,9 +18,16 @@ export NOMAD_VERSION="1.8.4"
 # Set each to the path of a .hclic file on your host machine.
 # If the file is absent or the variable is empty, CE packages are used.
 # ---------------------------------------------------------------------------
-export VAULT_LICENSE_FILE="/license/vault.hclic"    # e.g., /path/to/vault.hclic
-export CONSUL_LICENSE_FILE="/license/consul.hclic"   # e.g., /path/to/consul.hclic
-export NOMAD_LICENSE_FILE="/license/nomad.hclic"    # e.g., /path/to/nomad.hclic
+if [ -n "${BASH_VERSION:-}" ]; then
+  _lic_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+  # zsh: source env.sh from the repo root directory
+  _lic_root="$(pwd)"
+fi
+export VAULT_LICENSE_FILE="${_lic_root}/license/vault.hclic"
+export CONSUL_LICENSE_FILE="${_lic_root}/license/consul.hclic"
+export NOMAD_LICENSE_FILE="${_lic_root}/license/nomad.hclic"
+unset _lic_root
 
 # ---------------------------------------------------------------------------
 # Multipass VM names

@@ -61,7 +61,7 @@ vm_exec "$VM" "
 "
 # Nomad Enterprise: license required on server only (not clients)
 install_ent_license "$VM" "${NOMAD_LICENSE_FILE:-}" \
-  "/etc/nomad.d/nomad.hclic" "nomad" "/etc/nomad.d"
+  "/etc/nomad.d/nomad.hclic" "nomad" "/etc/nomad.d/nomad.env" "NOMAD_LICENSE_PATH"
 # Consul Enterprise: license propagates from consul-server to agents automatically
 
 # ---------------------------------------------------------------------------

@@ -57,7 +57,7 @@ vm_exec "$VM" "
   sudo chmod 600 /opt/tls/consul-server.key
 "
 install_ent_license "$VM" "${CONSUL_LICENSE_FILE:-}" \
-  "/etc/consul.d/consul.hclic" "consul" "/etc/consul.d"
+  "/etc/consul.d/consul.hclic" "consul" "/etc/consul.d/consul.env" "CONSUL_LICENSE_PATH"
 
 # ---------------------------------------------------------------------------
 # 4. Write Consul server configuration
