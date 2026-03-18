@@ -62,7 +62,9 @@ vm_exec "$VM" "
 # Nomad Enterprise: license required on server only (not clients)
 install_ent_license "$VM" "${NOMAD_LICENSE_FILE:-}" \
   "/etc/nomad.d/nomad.hclic" "nomad" "/etc/nomad.d/nomad.env" "NOMAD_LICENSE_PATH"
-# Consul Enterprise: license propagates from consul-server to agents automatically
+# Consul Enterprise: each agent node requires its own license
+install_ent_license "$VM" "${CONSUL_LICENSE_FILE:-}" \
+  "/etc/consul.d/consul.hclic" "consul" "/etc/consul.d/consul.env" "CONSUL_LICENSE_PATH"
 
 # ---------------------------------------------------------------------------
 # 3. Install Consul agent config (client mode, joins consul-server)
