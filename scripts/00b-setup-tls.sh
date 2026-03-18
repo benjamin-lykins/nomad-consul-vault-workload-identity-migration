@@ -59,8 +59,8 @@ distinguished_name = req_distinguished_name
 
 [v3_req]
 subjectAltName = @alt_names
-keyUsage = critical, keyEncipherment, dataEncipherment
-extendedKeyUsage = serverAuth
+keyUsage = critical, keyEncipherment, dataEncipherment, digitalSignature
+extendedKeyUsage = serverAuth, clientAuth
 
 [alt_names]
 IP.1 = ${ip}
