@@ -79,6 +79,16 @@ vault {
     ttl = "1h"
   }
 }
+
+tls {
+  http      = true
+  rpc       = true
+  ca_file   = "/opt/tls/ca.crt"
+  cert_file = "/opt/tls/nomad-server.crt"
+  key_file  = "/opt/tls/nomad-server.key"
+  verify_server_hostname = false
+  verify_https_client    = false
+}
 NOMADEOF
 multipass transfer "$_tmpfile" "$VM_NOMAD_SERVER:/tmp/nomad-server.hcl"
 rm -f "$_tmpfile"
@@ -86,6 +96,7 @@ vm_exec "$VM_NOMAD_SERVER" "
   sudo mv /tmp/nomad-server.hcl /etc/nomad.d/server.hcl
   sudo chown nomad:nomad /etc/nomad.d/server.hcl
   sudo chmod 640 /etc/nomad.d/server.hcl
+  sudo rm -f /etc/nomad.d/nomad.hcl
 "
 ok "Final Nomad server config written (no create_from_role)"
 

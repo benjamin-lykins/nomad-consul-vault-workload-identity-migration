@@ -222,6 +222,17 @@ vault {
     ttl = "1h"
   }
 }
+
+# TLS — HTTPS for Nomad API and RPC
+tls {
+  http      = true
+  rpc       = true
+  ca_file   = "/opt/tls/ca.crt"
+  cert_file = "/opt/tls/nomad-server.crt"
+  key_file  = "/opt/tls/nomad-server.key"
+  verify_server_hostname = false
+  verify_https_client    = false
+}
 NOMADEOF
 multipass transfer "$_tmpfile" "$VM_NOMAD_SERVER:/tmp/nomad-server.hcl"
 rm -f "$_tmpfile"
@@ -229,6 +240,7 @@ vm_exec "$VM_NOMAD_SERVER" "
   sudo mv /tmp/nomad-server.hcl /etc/nomad.d/server.hcl
   sudo chown nomad:nomad /etc/nomad.d/server.hcl
   sudo chmod 640 /etc/nomad.d/server.hcl
+  sudo rm -f /etc/nomad.d/nomad.hcl
 "
 ok "Coexistence Nomad server config written"
 
@@ -282,6 +294,17 @@ vault {
   ca_file = "/opt/tls/ca.crt"
 }
 
+# TLS — HTTPS for Nomad API and RPC
+tls {
+  http      = true
+  rpc       = true
+  ca_file   = "/opt/tls/ca.crt"
+  cert_file = "/opt/tls/nomad-client.crt"
+  key_file  = "/opt/tls/nomad-client.key"
+  verify_server_hostname = false
+  verify_https_client    = false
+}
+
 plugin "docker" {
   config {
     allow_privileged = false
@@ -297,6 +320,7 @@ vm_exec "$VM_NOMAD_CLIENT" "
   sudo mv /tmp/nomad-client.hcl /etc/nomad.d/client.hcl
   sudo chown nomad:nomad /etc/nomad.d/client.hcl
   sudo chmod 640 /etc/nomad.d/client.hcl
+  sudo rm -f /etc/nomad.d/nomad.hcl
 "
 ok "Coexistence Nomad client config written"
 
