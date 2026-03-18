@@ -65,7 +65,11 @@ migrate-vault: _ensure_exec
 migrate-consul: _ensure_exec
 	$(SCRIPTS)/11-migrate-consul-wi.sh
 
-## Reconfigure Nomad server + client to use workload identity (replaces legacy tokens)
+## Enable coexistence mode: Nomad runs legacy token auth + workload identity simultaneously
+coexistence: _ensure_exec
+	$(SCRIPTS)/11b-enable-coexistence.sh
+
+## Cutover: remove legacy Vault token from Nomad (requires coexistence step first)
 migrate-nomad: _ensure_exec
 	$(SCRIPTS)/12-update-nomad-wi.sh
 
@@ -78,6 +82,7 @@ migrate: _ensure_exec
 	@echo "=== Phase 2: Workload Identity Migration ==="
 	$(SCRIPTS)/10-migrate-vault-wi.sh
 	$(SCRIPTS)/11-migrate-consul-wi.sh
+	$(SCRIPTS)/11b-enable-coexistence.sh
 	$(SCRIPTS)/12-update-nomad-wi.sh
 	$(SCRIPTS)/13-verify-migration.sh
 
@@ -169,5 +174,6 @@ help:
 	@echo ""
 
 .PHONY: _ensure_exec vms vault consul nomad-server nomad-client bootstrap \
-        verify-legacy deploy migrate-vault migrate-consul migrate-nomad \
-        verify-wi migrate status ui secrets stop start unseal clean shell help
+        verify-legacy deploy migrate-vault migrate-consul coexistence \
+        migrate-nomad verify-wi migrate status ui secrets stop start \
+        unseal clean shell help

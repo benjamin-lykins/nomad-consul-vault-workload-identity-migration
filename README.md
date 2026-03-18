@@ -61,6 +61,7 @@ make deploy
 make verify-legacy
 
 # Phase 2 — Migrate to workload identity
+# (runs all steps in order: vault WI, consul WI, coexistence, cutover, verify)
 make migrate
 ```
 
@@ -281,9 +282,10 @@ make verify-legacy
 **The migration order matters:**
 
 ```
-Vault   ← configure JWT auth FIRST  (no Nomad downtime)
-Consul  ← configure JWT auth SECOND (no Nomad downtime)
-Nomad   ← switch config LAST        (brief restart, zero job downtime)
+Vault   ← configure JWT auth FIRST       (no Nomad downtime)
+Consul  ← configure JWT auth SECOND      (no Nomad downtime)
+Nomad   ← coexistence mode THIRD         (brief restart, both auth paths active)
+Nomad   ← WI-only cutover LAST           (brief restart, legacy token removed)
 ```
 
 ---
@@ -336,73 +338,105 @@ Changes on Consul (Nomad is **unchanged** at this step):
 
 ---
 
-#### Step 12 — Switch Nomad to Workload Identity
+#### Step 11b — Enable Coexistence Mode
+
+```bash
+make coexistence
+# or: scripts/11b-enable-coexistence.sh
+```
+
+Configures Nomad so that **both** the legacy Vault token path and the new Workload Identity path are active simultaneously. Existing jobs continue working on legacy tokens while any newly scheduled or redeployed job automatically uses WI.
+
+What this step does, in order:
+
+1. Creates (or recreates) the **Consul JWT auth method `nomad-workloads`** — the exact name Nomad 1.7+ expects when deriving per-task Consul tokens. Deletes any old `nomad-wi` method from previous runs.
+2. Creates a **Consul binding rule**: any JWT with `nomad_job_id != ""` → `nomad-workloads` role.
+3. **Enables Consul ACLs** on the Consul client agents running on both Nomad VMs (`/etc/consul.d/acl.hcl`) — without this the local agent returns `ACL support disabled` and JWT login fails at task startup.
+4. Creates **minimal Consul process tokens** for both the Nomad server and client (saved to `.secrets/`). These cover only Nomad's own service registration; per-task traffic uses JWT tokens.
+5. Writes the **coexistence Nomad server config** with both Vault auth paths active:
+   - `create_from_role = "nomad-cluster"` — legacy path, handles existing jobs
+   - `jwt_auth_backend_path = "jwt-nomad"` + `default_identity` — WI path, handles new/redeployed jobs
+6. Writes the **coexistence Nomad client config** with Consul `service_identity` and `task_identity` stanzas.
+7. Updates the **Nomad server systemd override** — keeps `VAULT_TOKEN` (still needed for legacy jobs), replaces the old Consul token with the new minimal process token.
+8. Updates the **Nomad client systemd override** similarly.
+9. Restarts Nomad server, then client.
+
+**Coexistence Nomad server vault stanza:**
+
+```hcl
+vault {
+  enabled = true
+  address = "http://vault:8200"
+
+  # Legacy: Nomad generates child tokens from this role for jobs without WI.
+  # Removed in scripts/12-update-nomad-wi.sh.
+  create_from_role = "nomad-cluster"
+
+  # Workload identity: new/redeployed jobs authenticate via short-lived JWT.
+  jwt_auth_backend_path = "jwt-nomad"
+  default_identity {
+    aud = ["vault.io"]
+    ttl = "1h"
+  }
+}
+```
+
+After this step you can redeploy individual jobs and verify they use WI before committing to the full cutover.
+
+---
+
+#### Step 12 — Workload Identity Cutover
 
 ```bash
 make migrate-nomad
 # or: scripts/12-update-nomad-wi.sh
 ```
 
-This is the moment of migration. It performs the following in order:
+Removes the legacy Vault token path. Prerequisite: Step 11b must have run first (process tokens and Consul infrastructure are already in place).
 
-1. Writes the new **Nomad server config** with JWT-based Vault + Consul stanzas (via `multipass transfer` — writes locally, transfers to VM, then `sudo mv` into place)
-2. Creates a **minimal Consul token** for the Nomad server process itself (Nomad still needs a token for its own service registration in Consul — workload JWTs only cover task traffic)
-3. **Renames the Consul auth method** to `nomad-workloads` if an old `nomad-wi` method exists from a previous run
-4. **Enables Consul ACLs** on the Consul client agents running on both Nomad VMs (`/etc/consul.d/acl.hcl`) — without this, the local agent returns `ACL support disabled` and JWT login fails
-5. Updates the **Nomad server systemd override** — removes `VAULT_TOKEN`, keeps a minimal `CONSUL_HTTP_TOKEN`
-6. Writes the new **Nomad client config** with JWT-based Consul stanzas
-7. Creates a **minimal Consul token** for the Nomad client process
-8. Updates the **Nomad client systemd override** similarly
-9. Restarts Nomad server, then client
+What this step does:
 
-Changes to configs:
+1. Writes the **final Nomad server config** — same as the coexistence config but with `create_from_role` removed. All task Vault access now goes through short-lived JWTs.
+2. Updates the **Nomad server systemd override** — removes `VAULT_TOKEN`, keeps `CONSUL_HTTP_TOKEN` (minimal process token from 11b).
+3. Updates the **Nomad client systemd override** similarly.
+4. Restarts Nomad server, then client.
 
-**Nomad server config** (`/etc/nomad.d/server.hcl`):
+**Config change (server.hcl vault stanza):**
 
 ```hcl
-# BEFORE (legacy)
+# BEFORE (coexistence — Step 11b)
 vault {
-  enabled = true
-  address = "http://vault:8200"
-  # token injected via VAULT_TOKEN env var
-}
-consul {
-  address = "127.0.0.1:8500"
-  # token injected via CONSUL_HTTP_TOKEN env var
-}
-
-# AFTER (workload identity)
-vault {
-  enabled               = true
-  address               = "http://vault:8200"
-  jwt_auth_backend_path = "jwt-nomad"   # ← new
-  default_identity {                    # ← new
+  enabled          = true
+  address          = "http://vault:8200"
+  create_from_role = "nomad-cluster"       # ← REMOVED in this step
+  jwt_auth_backend_path = "jwt-nomad"
+  default_identity {
     aud = ["vault.io"]
     ttl = "1h"
   }
 }
-consul {
-  address = "127.0.0.1:8500"
-  service_identity {                    # ← new
-    aud = ["consul.io"]
-    ttl = "1h"
-  }
-  task_identity {                       # ← new
-    aud = ["consul.io"]
+
+# AFTER (WI-only — Step 12)
+vault {
+  enabled = true
+  address = "http://vault:8200"
+  jwt_auth_backend_path = "jwt-nomad"
+  default_identity {
+    aud = ["vault.io"]
     ttl = "1h"
   }
 }
 ```
 
-**Systemd overrides**:
+**Systemd override change:**
 
 ```bash
-# BEFORE
-Environment='VAULT_TOKEN=hvs.CAESIHe...'       # removed
-Environment='CONSUL_HTTP_TOKEN=d4e9...'        # kept (minimal, process-only)
+# BEFORE (coexistence)
+Environment=VAULT_TOKEN=hvs.CAESIHe...      # ← removed
+Environment=CONSUL_HTTP_TOKEN=<process-token>
 
-# AFTER
-Environment='CONSUL_HTTP_TOKEN=<minimal-token>'  # only for Nomad's own service registration
+# AFTER (WI-only)
+Environment=CONSUL_HTTP_TOKEN=<process-token>  # only for Nomad's own service registration
 ```
 
 Both Nomad server and client are restarted. Running jobs continue on the client during the restart.
@@ -523,7 +557,7 @@ Common causes:
 
 **Consul pre-run hook fails: `ACL support disabled`:**
 
-The Consul client agent on the Nomad VM doesn't have ACLs enabled. Script 12 adds `/etc/consul.d/acl.hcl` to fix this, but if you're setting up manually:
+The Consul client agent on the Nomad VM doesn't have ACLs enabled. Script 11b adds `/etc/consul.d/acl.hcl` to fix this, but if you're setting up manually:
 ```bash
 # On nomad-server and nomad-client VMs:
 sudo tee /etc/consul.d/acl.hcl > /dev/null <<EOF
@@ -543,7 +577,7 @@ sudo systemctl restart consul
 Nomad 1.7+ looks for a Consul auth method named exactly `nomad-workloads`. If the method was created under a different name, delete it and recreate:
 ```bash
 consul acl auth-method delete -name <old-name>
-# Then re-run scripts/11-migrate-consul-wi.sh
+# Then re-run scripts/11b-enable-coexistence.sh (recreates the correct method)
 ```
 
 **`consul acl role update` fails: `Cannot update a role without specifying the -id parameter`:**
